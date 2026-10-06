@@ -1,0 +1,39 @@
+{
+  "name": "ludo-pals",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n convex,web -c magenta,cyan \"npm:dev:convex\" \"npm:dev:web\"",
+    "dev:convex": "convex dev",
+    "dev:web": "vite --host",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "sim": "tsx scripts/simulate.ts",
+    "format": "prettier --write .",
+    "gen:topo": "tsx scripts/gen-topo.ts"
+  },
+  "dependencies": {
+    "@fontsource/outfit": "^5.3.0",
+    "@fontsource/unbounded": "^5.3.0",
+    "canvas-confetti": "^1.9.4",
+    "convex": "^1.46.0",
+    "lucide-react": "^1.52.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.5",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3"
+  }
+}

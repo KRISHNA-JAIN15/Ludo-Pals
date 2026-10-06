@@ -1,0 +1,4 @@
+dist
+node_modules
+public/topo.svg
+package-lock.json

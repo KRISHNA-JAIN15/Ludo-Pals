@@ -1,0 +1,11 @@
+{
+  "name": "Ludo Pals",
+  "short_name": "Ludo Pals",
+  "description": "Cute, chaotic Ludo for 2–6 players with bots, online rooms and voice chat.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2EEE3",
+  "theme_color": "#F2EEE3",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
