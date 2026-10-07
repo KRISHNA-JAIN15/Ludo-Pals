@@ -5,9 +5,9 @@ import type { RoomSeat } from '../../shared/protocol';
 import { sound } from '../audio/sound';
 import { ChatPanel } from '../components/ChatPanel';
 import { Mascot } from '../components/Mascot';
-import { Avatar, Btn, IconBtn, Segmented } from '../components/ui';
+import { Avatar, Btn, Coin, IconBtn, Segmented } from '../components/ui';
 import { useOnline } from '../net/online';
-import { useApp } from '../store/app';
+import { HOST_FEE, useApp } from '../store/app';
 
 export function Lobby() {
   const room = useOnline((s) => s.room);
@@ -22,6 +22,7 @@ export function Lobby() {
   const go = useApp((s) => s.go);
   const toast = useApp((s) => s.toast);
   const updateProfile = useApp((s) => s.updateProfile);
+  const coins = useApp((s) => s.profile.coins);
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false); // synchronous guard: two taps can land before a re-render
 
@@ -47,6 +48,7 @@ export function Lobby() {
   const link = `${location.origin}${location.pathname}?room=${room.code}`;
   const notReady = room.seats.filter((s) => s.kind === 'human' && s.connected && !s.ready);
   const canStart = room.seats.length >= 2 && notReady.length === 0;
+  const canPay = coins >= HOST_FEE; // the host pays for each match
 
   const share = async () => {
     sound.play('click');
@@ -283,13 +285,15 @@ export function Lobby() {
                   setStarting(false);
                 });
               }}
-              disabled={room.seats.length < 2 || starting}
+              disabled={room.seats.length < 2 || starting || !canPay}
             >
-              {canStart
-                ? `Start game (${room.seats.length} players)`
-                : room.seats.length < 2
-                  ? 'Need 2+ players'
-                  : `Waiting for ${notReady.length} to get ready`}
+              {!canPay
+                ? `Need ${HOST_FEE} coins to start`
+                : canStart
+                  ? `Start game (${room.seats.length} players)`
+                  : room.seats.length < 2
+                    ? 'Need 2+ players'
+                    : `Waiting for ${notReady.length} to get ready`}
             </Btn>
             {room.seats.length < 2 && <p className="hint center">Share the code or add a bot to start.</p>}
           </>
@@ -303,6 +307,19 @@ export function Lobby() {
           >
             {me?.ready ? 'Ready! Waiting for host…' : "I'm ready"}
           </Btn>
+        )}
+        {(!isHost || room.seats.length >= 2) && (
+          <p className="hint center">
+            {isHost ? (
+              <>
+                Each match costs you {HOST_FEE} <Coin size={15} /> as host · you have {coins.toLocaleString()}
+              </>
+            ) : (
+              <>
+                Free for you: the host pays {HOST_FEE} <Coin size={15} /> a match
+              </>
+            )}
+          </p>
         )}
       </div>
     </div>

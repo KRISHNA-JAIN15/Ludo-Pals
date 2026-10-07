@@ -7,7 +7,7 @@ import { Mascot } from '../components/Mascot';
 import { Avatar, Btn, Coin } from '../components/ui';
 import { ordinal } from '../game/useGameFeed';
 import { useOnline } from '../net/online';
-import { coinsFor, useApp } from '../store/app';
+import { HOST_FEE, coinsFor, useApp } from '../store/app';
 
 function useCountUp(target: number, ms = 1200) {
   const [n, setN] = useState(0);
@@ -43,6 +43,7 @@ export function Results() {
   const room = useOnline((s) => s.room);
   const myId = useOnline((s) => s.myId);
   const coins = useCountUp(result?.coins ?? 0);
+  const balance = useApp((s) => s.profile.coins);
 
   useEffect(() => {
     if (!result) go('hub');
@@ -75,6 +76,8 @@ export function Results() {
     return out;
   };
   const isHost = online && room?.hostId === myId;
+  const hostShort = isHost && balance < HOST_FEE; // the host pays for the rematch
+  const net = result.coins - result.fee;
   // Who has gone: left during the match, or left the room since it ended.
   const stillHere = new Set(room?.seats.filter((x) => !x.left).map((x) => x.id) ?? []);
   const hasLeft = (p: PlayerState) => p.left || (online && !!room && p.kind === 'human' && p.id !== myId && !stillHere.has(p.id));
@@ -152,11 +155,21 @@ export function Results() {
           <Coin size={28} />
         </section>
       )}
+      {mine && result.fee > 0 && (
+        <p className="hint center">
+          Hosting fee −{result.fee} · net {net < 0 ? '−' : '+'}
+          {Math.abs(net)}
+        </p>
+      )}
 
       <div className="results-actions">
         {online ? (
           <>
-            {isHost ? (
+            {hostShort ? (
+              <p className="hint center">
+                A rematch costs the host {HOST_FEE} coins and you have {balance}. Leave so a friend can host, or win offline games to earn more!
+              </p>
+            ) : isHost ? (
               <Btn variant="black" size="lg" full icon={<RotateCcw size={18} />} onClick={() => useOnline.getState().rematch()}>
                 Rematch
               </Btn>
@@ -172,10 +185,10 @@ export function Results() {
               icon={<LogOut size={18} />}
               onClick={() => {
                 useOnline.getState().leave();
-                go('hub');
+                go(hostShort ? 'setup' : 'hub');
               }}
             >
-              Leave room
+              {hostShort ? 'Play offline' : 'Leave room'}
             </Btn>
           </>
         ) : (

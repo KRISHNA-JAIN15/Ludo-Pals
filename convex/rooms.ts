@@ -258,6 +258,7 @@ export const start = mutation({
       newId(10),
       ctxStep.now,
     );
+    st.hostId = room.hostId; // the host pays for the match (client-side coins)
     // Anyone who dropped out of the lobby (or somehow has no membership) starts with a bot playing for them.
     const memberIds = new Set((await membersOf(ctx, room.code)).map((m) => m.playerId));
     for (const p of st.players) {

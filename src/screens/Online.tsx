@@ -5,9 +5,9 @@ import { ROOM_CODE_LENGTH } from '../../shared/protocol';
 import type { DiceMode, ModeId } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Mascot } from '../components/Mascot';
-import { Avatar, Btn, IconBtn, Segmented, Topo } from '../components/ui';
+import { Avatar, Btn, Coin, IconBtn, Segmented, Topo } from '../components/ui';
 import { useOnline } from '../net/online';
-import { useApp } from '../store/app';
+import { HOST_FEE, useApp } from '../store/app';
 
 function urlRoom(): string {
   try {
@@ -32,6 +32,7 @@ export function Online() {
   const typing = useRef(false);
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
   const autoJoined = useRef(false);
+  const canHost = profile.coins >= HOST_FEE;
 
   useEffect(() => {
     connect();
@@ -136,6 +137,23 @@ export function Online() {
         </div>
       </section>
 
+      <section className={`card fee-card ${canHost ? '' : 'is-short'}`}>
+        <Coin size={34} />
+        <div className="fee-text">
+          <b>{canHost ? `Hosting costs ${HOST_FEE} coins a match` : `You need ${HOST_FEE} coins to host`}</b>
+          <span>
+            {canHost
+              ? `Joining a friend's room is free. You have ${profile.coins.toLocaleString()}.`
+              : `You have ${profile.coins}. Joining a friend's room is free, and offline wins pay up to 100 coins.`}
+          </span>
+        </div>
+        {!canHost && (
+          <Btn size="sm" variant="black" onClick={() => go('setup')}>
+            Play offline
+          </Btn>
+        )}
+      </section>
+
       <section className="card">
         <h2 className="card-title">Join a room</h2>
         <form
@@ -199,7 +217,7 @@ export function Online() {
           <span className="field-label">Turn timer</span>
           <Segmented value={timer} onChange={setTimer} options={[10, 15, 20, 30].map((n) => ({ value: n, label: `${n}s` }))} />
         </div>
-        <Btn variant="teal" size="lg" full icon={<Plus size={20} />} onClick={doCreate} disabled={status !== 'online' || !!busy}>
+        <Btn variant="teal" size="lg" full icon={<Plus size={20} />} onClick={doCreate} disabled={status !== 'online' || !!busy || !canHost}>
           {busy === 'create' ? 'Creating…' : 'Create Room'}
         </Btn>
         <p className="hint center">Empty seats? Add bots in the lobby.</p>

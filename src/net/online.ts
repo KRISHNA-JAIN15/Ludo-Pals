@@ -6,7 +6,7 @@ import type { Id } from '../../convex/_generated/dataModel';
 import type { ChatMessage, RoomState, VoiceSignal } from '../../shared/protocol';
 import type { BotLevel, CharacterId, DiceMode, GameState, ModeId } from '../../shared/types';
 import { sound } from '../audio/sound';
-import { tabSecret, useApp } from '../store/app';
+import { HOST_FEE, tabSecret, useApp } from '../store/app';
 import { VoiceChat } from './voice';
 
 export interface FloatingEmote {
@@ -141,6 +141,17 @@ function goneReason(room: RoomState | null, was: RoomStatus | undefined, myId: s
   return null;
 }
 
+/** Hosting costs coins: say so and return true when this player can't cover a match. */
+function cantHost(): boolean {
+  const { profile, toast } = useApp.getState();
+  if (profile.coins >= HOST_FEE) return false;
+  toast(
+    `Hosting costs ${HOST_FEE} coins a match and you have ${profile.coins}. Join a friend's room for free, or win offline games to earn more!`,
+    'info',
+  );
+  return true;
+}
+
 function errorMessage(e: unknown): string {
   if (e instanceof ConvexError) return typeof e.data === 'string' ? e.data : 'Something went wrong.';
   return 'Could not reach the game server. Check your connection.';
@@ -246,6 +257,12 @@ export const useOnline = create<OnlineStore>((set, get) => {
 
   const onGame = (game: GameState | null) => {
     set({ game });
+    const me = game ? game.players.findIndex((p) => p.id === get().myId) : -1;
+    if (game && me >= 0 && !game.players[me].left) {
+      if (game.hostId === get().myId) app().payHostFee(game.id, game.phase !== 'over');
+      // Bank the prize as soon as it's decided: a quick rematch can swap the board out before the results show.
+      if (game.phase === 'over') app().bankResult(game, me);
+    }
     if (game && game.phase !== 'over' && app().screen !== 'game' && get().room?.status === 'playing') app().go('game');
   };
 
@@ -398,6 +415,7 @@ export const useOnline = create<OnlineStore>((set, get) => {
     },
 
     create: async (p) => {
+      if (cantHost()) return false;
       get().connect();
       if (!client) return false;
       const { profile } = app();

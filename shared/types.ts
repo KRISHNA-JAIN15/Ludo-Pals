@@ -130,4 +130,6 @@ export interface GameState {
   events: GameEvent[];
   speed: number;
   startedAt: number;
+  /** Online only: the host who started this match, and so paid for it. */
+  hostId?: string;
 }

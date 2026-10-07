@@ -13,9 +13,19 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 - **Chat and emotes.** Quick-chat phrases, free text, and floating emoji reactions. Bots react too 😎.
 - **Six Pals.** Cherry, Mossy, Sunny, Splash, Boo and Blaze. Each has a bio and catchphrase, and their faces change mood when they roll a six, get bonked, or win.
 - **Juice.** 3D dice, hop-by-hop token movement, BONK bursts and screen shake, home-run sparkles, confetti, haptics on Android, synthesized SFX and a music loop.
-- **Progress.** Coins, wins, win rate, captures and a trophy shelf.
+- **Progress.** Coins, wins, win rate, captures and a trophy shelf. Every game pays coins; hosting an online match costs 100. See [Coins](#coins).
 
 Rules: roll a 6 to leave the yard (Quick mode: 1 or 6). Rolling a 6, capturing, or reaching home gives a bonus roll. Three 6s in a row burns the turn. Start squares and ★ squares are safe. You need the exact roll to finish. Quick mode uses 2 tokens per player.
+
+## Coins
+
+Everyone starts with 250 coins.
+
+- **Every game pays out** by finishing place: 100 / 60 / 35 / 20 / 12 / 8 coins for 1st to 6th, plus 5 per capture. Games on your own device (against bots, or pass-and-play) are free.
+- **Hosting an online match costs 100 coins.** The host pays when the match starts, and again for every rematch. Joining a friend's room is free.
+- **Under 100 coins?** You can still join rooms, but you can't host until you've won a few more coins. If the host leaves, whoever takes over pays for the next match.
+
+Coins live on your device (see [Where data lives](#where-data-lives)), so this is a friendly game economy, not a secure one: someone determined could edit their own balance.
 
 ## Leaving and coming back
 
@@ -80,7 +90,7 @@ Vercel's Hobby plan serves the static app for free. Convex's free plan includes 
 ## Where data lives
 
 - **Your name, chosen Pal, coins, wins, trophies and settings** are stored in your browser's `localStorage` (key `ludo-pals:v1`). Every player's device keeps its own, so any number of people can play at once without clashing, and deploying a new version doesn't touch it. It doesn't follow you to another browser or phone, and clearing site data resets it.
-- **A local game in progress** is saved in `localStorage` (`ludo-pals:local-game`) so it survives a refresh; finished games are cleared. The ids of games already counted towards your coins are kept too, so refreshing a results screen can't pay out twice.
+- **A local game in progress** is saved in `localStorage` (`ludo-pals:local-game`) so it survives a refresh; finished games are cleared. The ids of games already counted towards your coins, and of online matches you already paid to host, are kept too, so a refresh can't pay out or charge twice.
 - **Rooms, seats, the live game, chat and emotes** live in Convex while a room is open. Rooms are deleted automatically about 10 minutes after the last player leaves. Nothing about finished games is kept.
 - **Which room this tab is in** is a random per-tab secret in `sessionStorage`, which is how a refresh rejoins your game.
 

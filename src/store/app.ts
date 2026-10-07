@@ -33,6 +33,8 @@ export interface ResultSummary {
   me: number | null;
   online: boolean;
   coins: number;
+  /** What this device paid to host the match (online only). */
+  fee: number;
   config: MatchConfig | null;
 }
 
@@ -57,21 +59,45 @@ interface AppStore {
   updateProfile: (p: Partial<Profile>) => void;
   updateSettings: (s: Partial<Settings>) => void;
   startLocal: (cfg: MatchConfig, resume?: SavedGame) => void;
-  finishGame: (r: Omit<ResultSummary, 'coins'>) => void;
+  finishGame: (r: Omit<ResultSummary, 'coins' | 'fee'>) => void;
+  /** Bank a finished game's coins and stats (once per game); returns the coins it pays. */
+  bankResult: (state: GameState, me: number | null) => number;
+  /** Charge the host's fee for an online match (once per match). */
+  payHostFee: (gameId: string, announce: boolean) => void;
   toast: (text: string, tone?: Toast['tone']) => void;
   dismissToast: (id: number) => void;
 }
 
 const KEY = 'ludo-pals:v1';
-const RECORDED_KEY = 'ludo-pals:recorded';
+const RECORDED_KEY = 'ludo-pals:recorded'; // games already counted towards stats and coins
+const PAID_KEY = 'ludo-pals:paid'; // online matches already paid for as the host
 
-/** Games already counted towards stats/coins. Persisted so a refresh on the results screen can't pay out twice. */
-function alreadyRecorded(gameId: string): boolean {
+const seenIds = new Map<string, Set<string>>();
+
+/**
+ * True the first time `id` is seen under `key`, so a payout or a charge happens once per game
+ * even across refreshes (persisted, last 50). The in-memory copy covers private browsing,
+ * where storage can fail and the same game would otherwise be counted on every update.
+ */
+function firstTime(key: string, id: string): boolean {
+  const mem = seenIds.get(key) ?? new Set<string>();
+  seenIds.set(key, mem);
+  if (mem.has(id)) return false;
+  mem.add(id);
   try {
-    const ids: string[] = JSON.parse(localStorage.getItem(RECORDED_KEY) ?? '[]');
-    if (ids.includes(gameId)) return true;
-    localStorage.setItem(RECORDED_KEY, JSON.stringify([...ids, gameId].slice(-50)));
-    return false;
+    const ids: string[] = JSON.parse(localStorage.getItem(key) ?? '[]');
+    if (ids.includes(id)) return false;
+    localStorage.setItem(key, JSON.stringify([...ids, id].slice(-50)));
+  } catch {
+    /* private mode */
+  }
+  return true;
+}
+
+function seenBefore(key: string, id: string): boolean {
+  if (seenIds.get(key)?.has(id)) return true;
+  try {
+    return (JSON.parse(localStorage.getItem(key) ?? '[]') as string[]).includes(id);
   } catch {
     return false;
   }
@@ -113,6 +139,9 @@ function save(profile: Profile, settings: Settings) {
 }
 
 export const COIN_TABLE = [100, 60, 35, 20, 12, 8];
+
+/** What the host pays for each online match they start; joining is free, and so are offline games. */
+export const HOST_FEE = 100;
 
 export function coinsFor(state: GameState, me: number): number {
   const p = state.players[me];
@@ -169,11 +198,15 @@ export const useApp = create<AppStore>((set, get) => ({
   },
   startLocal: (cfg, resume) => set({ localConfig: cfg, localResume: resume ?? null, screen: 'game', result: null }),
   finishGame: (r) => {
-    const { state, me } = r;
-    let coins = 0;
-    if (me !== null && !alreadyRecorded(state.id)) {
+    const coins = get().bankResult(r.state, r.me);
+    const fee = r.online && seenBefore(PAID_KEY, r.state.id) ? HOST_FEE : 0;
+    set({ result: { ...r, coins, fee }, screen: 'results' });
+  },
+  bankResult: (state, me) => {
+    if (me === null) return 0;
+    const coins = coinsFor(state, me);
+    if (firstTime(RECORDED_KEY, state.id)) {
       const p = state.players[me];
-      coins = coinsFor(state, me);
       const prof = get().profile;
       get().updateProfile({
         coins: prof.coins + coins,
@@ -185,7 +218,12 @@ export const useApp = create<AppStore>((set, get) => ({
         homeRuns: prof.homeRuns + p.tokens.filter((t) => t === finishAt(state.arms)).length,
       });
     }
-    set({ result: { ...r, coins }, screen: 'results' });
+    return coins;
+  },
+  payHostFee: (gameId, announce) => {
+    if (!firstTime(PAID_KEY, gameId)) return;
+    get().updateProfile({ coins: Math.max(0, get().profile.coins - HOST_FEE) });
+    if (announce) get().toast(`Game on! You paid ${HOST_FEE} coins to host this match.`, 'info');
   },
   toast: (text, tone = 'info') => {
     const id = ++toastId;

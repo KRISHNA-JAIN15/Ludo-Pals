@@ -31,7 +31,7 @@ export function Hub() {
           <Avatar id={profile.character} size={40} />
           <span>{profile.name}</span>
         </button>
-        <div className="coins-pill" title="Coins — earn more by winning">
+        <div className="coins-pill" title="Coins: win games to earn them, spend them hosting online matches">
           <span>{profile.coins.toLocaleString()}</span>
           <Coin size={26} />
         </div>
@@ -106,7 +106,7 @@ const CARDS: ModeCard[] = [
   {
     key: 'online',
     title: ['Online', 'Party'],
-    sub: 'Rooms · voice chat',
+    sub: 'Join free · host for 100 coins',
     color: '#F6C443',
     pal: 'splash',
     cta: 'Play Online',
@@ -465,6 +465,11 @@ export function HowToPlay({ open, onClose }: { open: boolean; onClose: () => voi
     ['🔥', 'Three sixes', 'Roll three 6s in a row and your turn is burned. Greedy!'],
     ['🎯', 'Exact finish', 'You need the exact number to land in the centre.'],
     ['🏆', 'Win', 'First to get all their pals home wins. The race continues for the podium!'],
+    [
+      '🪙',
+      'Coins',
+      "Every game pays coins by finishing place. Hosting an online match costs 100 coins (again for each rematch); joining a friend's room is free.",
+    ],
   ];
   return (
     <Sheet open={open} onClose={onClose} title="How to play">
