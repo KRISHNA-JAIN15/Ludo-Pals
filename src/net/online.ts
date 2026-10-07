@@ -70,26 +70,75 @@ let leaving = false;
 let voice: VoiceChat | null = null;
 let voiceRejoining = false;
 let clearingStaleVoice = false;
+/** When we last tried to slip back into a lobby we were dropped from (avoid retry loops). */
+let lastAutoRejoin = 0;
+/** The room's status the last time it showed us seated (and not left): what we were doing before losing the seat. */
+let seatedStatus: RoomStatus = 'lobby';
 let emotesPrimed = false;
 const seenEmotes = new Set<string>();
 const handledSignals = new Set<string>();
 let emoteKey = 0;
 
-function rememberRoom(code: string | null) {
+type RoomStatus = RoomState['status'];
+
+/** What this identity was last doing online, kept per identity so a new tab can pick it up. */
+interface RoomMemory {
+  code: string;
+  /** Our seat's public id. */
+  id: string;
+  /** The room's status the last time we had a seat in it. */
+  status: RoomStatus;
+  /** When a tab last confirmed it. */
+  at: number;
+  /** The tab was closed (or navigated away) rather than killed by the browser. */
+  closed?: boolean;
+}
+
+/** A new tab slips back into a lobby it lost only this soon after the old tab went quiet. */
+const LOBBY_RETURN_MS = 5 * 60_000;
+
+const roomKey = () => `${ROOM_KEY}:${secret}`;
+
+function rememberRoom(m: RoomMemory | null) {
   try {
-    if (code) sessionStorage.setItem(ROOM_KEY, code);
-    else sessionStorage.removeItem(ROOM_KEY);
+    if (m) localStorage.setItem(roomKey(), JSON.stringify(m));
+    else localStorage.removeItem(roomKey());
   } catch {
     /* ignore */
   }
 }
 
-export function hadRoom(): boolean {
+function rememberedRoom(): RoomMemory | null {
   try {
-    return !!sessionStorage.getItem(ROOM_KEY);
+    const m = JSON.parse(localStorage.getItem(roomKey()) ?? 'null') as RoomMemory | null;
+    return m && typeof m.code === 'string' ? m : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hadRoom(): boolean {
+  return !!rememberedRoom();
+}
+
+/** This page load is a refresh (or the browser reloading a tab it put to sleep), not a new tab. */
+function reloaded(): boolean {
+  try {
+    return (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload';
   } catch {
     return false;
   }
+}
+
+/** Why we lost our seat, for a toast; null when there is nothing worth saying. */
+function goneReason(room: RoomState | null, was: RoomStatus | undefined, myId: string): string | null {
+  if (!room) return 'The room was closed.';
+  // Our seat stays in a running game (marked as left) while a bot plays it.
+  if (myId && room.seats.some((s) => s.id === myId)) return 'You were away too long, so a bot is finishing your game.';
+  if (was === 'playing') return 'The game finished while you were away.';
+  if (room.status === 'playing' && was === 'lobby') return 'The game started without you.';
+  if (room.status === 'lobby' && was === 'lobby') return 'You were removed from the room.';
+  return null;
 }
 
 function errorMessage(e: unknown): string {
@@ -113,8 +162,15 @@ const fire = (p: Promise<unknown> | undefined) => void (p && call(p));
 export const useOnline = create<OnlineStore>((set, get) => {
   const app = () => useApp.getState();
 
+  /** Note what we're doing, so a new tab (after a closed tab or a killed browser) can pick it up. */
+  const noteRoom = (closed?: boolean) => {
+    if (currentCode) rememberRoom({ code: currentCode, id: get().myId, status: seatedStatus, at: Date.now(), closed });
+  };
+
   const beat = () => {
-    if (client && currentCode) client.mutation(api.rooms.heartbeat, { secret }).catch(() => {});
+    if (!client || !currentCode) return;
+    noteRoom();
+    client.mutation(api.rooms.heartbeat, { secret }).catch(() => {});
   };
 
   const teardownVoice = () => {
@@ -139,9 +195,9 @@ export const useOnline = create<OnlineStore>((set, get) => {
     set({ room: null, game: null, chat: [], unread: 0, emotes: [], myId: '' });
   };
 
-  const onRoomGone = (reason: string) => {
+  const onRoomGone = (reason: string | null) => {
     clearRoom();
-    app().toast(reason, 'info');
+    if (reason) app().toast(reason, 'info');
     const { screen, go } = app();
     if (screen === 'lobby' || screen === 'game') go('online');
   };
@@ -153,6 +209,10 @@ export const useOnline = create<OnlineStore>((set, get) => {
     if (prev && room.seats.length > prev.seats.length) sound.play('join');
 
     const mine = room.seats.find((s) => s.id === get().myId);
+    if (mine && !mine.left && room.status !== seatedStatus) {
+      seatedStatus = room.status;
+      noteRoom();
+    }
     if (voice) {
       // Peers who left voice (or the room) hang up.
       for (const s of prev?.seats ?? []) {
@@ -215,7 +275,7 @@ export const useOnline = create<OnlineStore>((set, get) => {
     unsubscribeRoom();
     leaving = false;
     currentCode = code;
-    rememberRoom(code);
+    seatedStatus = 'lobby';
     emotesPrimed = false;
     seenEmotes.clear();
     beat();
@@ -234,17 +294,44 @@ export const useOnline = create<OnlineStore>((set, get) => {
       if (me.code !== currentCode) subscribeRoom(me.code);
       return;
     }
-    if (!currentCode) return;
-    const code = currentCode;
     if (leaving) {
       leaving = false;
       clearRoom();
       return;
     }
-    // We were removed: tell the player whether the room still exists.
+    // We lost our seat without leaving: away too long, kicked, or the room closed. A tab that
+    // slept through it explains what happened; a new tab (the old one was closed or killed)
+    // has no room yet, so it goes by what this identity was last doing.
+    const memory = currentCode ? null : rememberedRoom();
+    const code = currentCode ?? memory?.code;
+    if (!code) return;
+    const was = memory ? memory.status : seatedStatus;
+    const myId = get().myId || memory?.id || '';
+    // A tab closed on purpose said goodbye to its lobby (a refresh isn't a goodbye); one the browser
+    // killed gets a few minutes to come back. An invite link wins: the Online screen joins that room.
+    const mayRejoin = memory
+      ? was === 'lobby' && (!memory.closed || reloaded()) && Date.now() - memory.at < LOBBY_RETURN_MS && !location.search.includes('room=')
+      : was !== 'playing';
+    if (memory && !mayRejoin && was !== 'playing') {
+      clearRoom(); // nothing worth saying about a lobby or finished game we walked away from
+      return;
+    }
     void client!
       .query(api.rooms.get, { code })
-      .then((r) => onRoomGone(r ? 'You were removed from the room.' : 'The room was closed.'))
+      .then(async (room) => {
+        if (room?.status === 'lobby' && mayRejoin && Date.now() - lastAutoRejoin > 30_000) {
+          // Back from being away: slip straight back into the lobby (the server refuses kicked players).
+          lastAutoRejoin = Date.now();
+          clearRoom();
+          if (await get().join(code)) {
+            app().toast("Welcome back! You're in the lobby again.", 'success');
+            return;
+          }
+          if (app().screen === 'lobby' || app().screen === 'game') app().go('online');
+          return;
+        }
+        onRoomGone(goneReason(room as RoomState | null, was, myId));
+      })
       .catch(() => onRoomGone('You left the room.'));
   };
 
@@ -299,7 +386,9 @@ export const useOnline = create<OnlineStore>((set, get) => {
       // Closing the tab: tell the server right away so others see it within seconds.
       // (If this is only a refresh, the reloaded page's heartbeat cancels it.)
       window.addEventListener('pagehide', () => {
-        if (!currentCode || !SITE_URL) return;
+        if (!currentCode) return;
+        noteRoom(true);
+        if (!SITE_URL) return;
         try {
           navigator.sendBeacon(`${SITE_URL}/bye`, secret);
         } catch {

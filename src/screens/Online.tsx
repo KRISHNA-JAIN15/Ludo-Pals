@@ -29,6 +29,7 @@ export function Online() {
   const [dice, setDice] = useState<DiceMode>('fair');
   const [code, setCode] = useState(urlRoom);
   const [name, setName] = useState(profile.name);
+  const typing = useRef(false);
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
   const autoJoined = useRef(false);
 
@@ -36,7 +37,13 @@ export function Online() {
     connect();
   }, [connect]);
 
+  // Follow a rename made in another tab, unless you're typing here.
+  useEffect(() => {
+    if (!typing.current) setName(profile.name);
+  }, [profile.name]);
+
   const saveName = () => {
+    typing.current = false;
     const n = name.trim() || profile.name;
     setName(n);
     if (n !== profile.name) updateProfile({ name: n });
@@ -118,7 +125,10 @@ export function Online() {
             className="seat-name"
             value={name}
             maxLength={16}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              typing.current = true;
+              setName(e.target.value);
+            }}
             onBlur={saveName}
             aria-label="Your name"
           />

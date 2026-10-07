@@ -9,19 +9,23 @@ import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 
-/** No heartbeat for this long: shown as away (in a game, a bot plays for them). */
-export const HEARTBEAT_STALE_MS = 30_000;
 /**
- * Silent this long: removed from a lobby / finished room. Long on purpose: phones pause
- * background tabs, and a host sharing the code in another app must not lose the room.
- * Closing the tab is detected much faster through the goodbye beacon (GONE_GRACE_MS).
+ * Presence rules. A tab heartbeats every 10s and sends a goodbye beacon when it closes.
+ * - Closed tab: shown as away at once; after GONE_GRACE_MS without coming back (a refresh comes
+ *   back within a second or two) they're removed from lobbies and finished rooms, or a bot takes
+ *   over their pieces in a game.
+ * - Silent (phone in the background, crashed browser, no beacon): away after HEARTBEAT_STALE_MS.
+ *   Guests leave a lobby after LOBBY_GUEST_DROP_MS; the host keeps the room LOBBY_HOST_DROP_MS
+ *   (they're probably sharing the code from another app).
+ * - In a game an away player can come back and reclaim the seat until AWAY_LEFT_MS, after which
+ *   they count as having left (a bot finishes for them).
  */
-export const LOBBY_DROP_MS = 5 * 60_000;
+export const HEARTBEAT_STALE_MS = 30_000;
+export const GONE_GRACE_MS = 8_000;
+export const LOBBY_GUEST_DROP_MS = 60_000;
+export const LOBBY_HOST_DROP_MS = 5 * 60_000;
 export const ENDED_DROP_MS = 2 * 60_000;
-/** After the page-close beacon, wait this long for a heartbeat (a refresh) before treating them as gone. */
-export const GONE_GRACE_MS = 12_000;
-/** A closed tab can never reclaim its seat (its identity lived in that tab), so mid-game it becomes "left". */
-export const GONE_LEFT_MS = 45_000;
+export const AWAY_LEFT_MS = 3 * 60_000;
 export const EMPTY_ROOM_TTL_MS = 10 * 60_000;
 export const SWEEP_EVERY_MS = 10_000;
 

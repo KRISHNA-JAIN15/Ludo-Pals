@@ -30,6 +30,8 @@ export default defineSchema({
     seats: v.array(seatValidator),
     /** When the last human went quiet; the room is deleted after a while. */
     emptySince: v.union(v.number(), v.null()),
+    /** Secrets of players the host removed, so they can't walk straight back in. Never sent to clients. */
+    kicked: v.optional(v.array(v.string())),
   }).index('by_code', ['code']),
 
   /**

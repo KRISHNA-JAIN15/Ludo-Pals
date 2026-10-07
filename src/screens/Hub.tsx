@@ -336,7 +336,13 @@ function SettingsTab({ onHelp }: { onHelp: () => void }) {
   const updateSettings = useApp((s) => s.updateSettings);
   const toast = useApp((s) => s.toast);
   const [name, setName] = useState(profile.name);
+  const typing = useRef(false);
   const [confirm, setConfirm] = useState(false);
+
+  // Follow a rename made in another tab, unless you're typing here.
+  useEffect(() => {
+    if (!typing.current) setName(profile.name);
+  }, [profile.name]);
 
   return (
     <div className="settings-tab">
@@ -349,11 +355,13 @@ function SettingsTab({ onHelp }: { onHelp: () => void }) {
             value={name}
             maxLength={16}
             onChange={(e) => {
+              typing.current = true;
               setName(e.target.value);
               // Save as you type: switching tabs doesn't always blur the field first.
               if (e.target.value.trim()) updateProfile({ name: e.target.value.trim() });
             }}
             onBlur={() => {
+              typing.current = false;
               const n = name.trim() || profile.name;
               setName(n);
               updateProfile({ name: n });

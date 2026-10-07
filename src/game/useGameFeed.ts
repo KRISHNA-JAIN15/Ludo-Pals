@@ -170,9 +170,26 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
           }, 600);
           break;
         }
-        case 'auto':
-          if (mine(e.player) && e.auto) show({ title: 'Auto-play on', sub: 'A bot is playing for you', tone: 'info' }, 1600);
+        case 'auto': {
+          const pl = state.players[e.player];
+          if (mine(e.player)) {
+            if (e.auto) show({ title: 'Auto-play on', sub: 'A bot is playing for you', tone: 'info' }, 1600);
+          } else if (pl.kind === 'human' && !pl.left) {
+            // Someone else dropped out or came back: everyone should know who is really playing.
+            if (e.auto)
+              show(
+                {
+                  title: `${pl.name} ${pl.connected ? 'is idle' : 'disconnected'}`,
+                  sub: 'A bot is playing for them for now',
+                  tone: 'info',
+                  character: pl.character,
+                },
+                1600,
+              );
+            else show({ title: `${pl.name} is back!`, sub: 'Taking over from the bot', tone: 'home', character: pl.character }, 1500);
+          }
           break;
+        }
         case 'left':
           if (!mine(e.player)) {
             sound.play('noMove');

@@ -8,7 +8,7 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 - **Fair, deterministic dice.** By default every player rolls from their own shuffled "bag": each number 1–6 comes up exactly once in every six rolls, so nobody waits 20 turns for a six and luck evens out, like the balanced dice of online Ludo apps. Every game has a seed: dice, bot choices and who goes first all derive from it, so a game replays identically from its seed. Pick **Lucky** dice for classic pure chance.
 - **Bots.** Pick how many humans are playing and bots fill the table up to 4 (adjustable, up to 6). Three skill levels: Chill, Normal, Savage. Normal and Savage play deterministically (same position and roll, same move).
 - **Pass & play.** Several humans can share one device; humans are seated apart and the game announces whose turn it is. Local games save automatically, so a refresh or a closed tab can be picked up again with "Continue your game".
-- **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving. If someone loses connection or goes idle, they show as AWAY and a bot plays for them until they're back; if they leave (or close the tab), everyone sees them as LEFT and a bot finishes their game. Lobbies and finished rooms drop people who've gone, so a rematch only includes who's actually there. Refreshing the page rejoins the game.
+- **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving, and a rematch only includes people who are actually there. See [Leaving and coming back](#leaving-and-coming-back).
 - **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars.
 - **Chat and emotes.** Quick-chat phrases, free text, and floating emoji reactions. Bots react too 😎.
 - **Six Pals.** Cherry, Mossy, Sunny, Splash, Boo and Blaze. Each has a bio and catchphrase, and their faces change mood when they roll a six, get bonked, or win.
@@ -16,6 +16,20 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 - **Progress.** Coins, wins, win rate, captures and a trophy shelf.
 
 Rules: roll a 6 to leave the yard (Quick mode: 1 or 6). Rolling a 6, capturing, or reaching home gives a bonus roll. Three 6s in a row burns the turn. Start squares and ★ squares are safe. You need the exact roll to finish. Quick mode uses 2 tokens per player.
+
+## Leaving and coming back
+
+Each browser tab heartbeats every 10 seconds and sends a goodbye signal when it closes. A player's identity survives refreshes and closing the tab, so on the same device they can get back to their game; two tabs open at the same time are still two different players.
+
+| Situation                                                    | Lobby                                                                                                                                                           | In a game                                                                                                       |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Tab closed                                                   | Shown as away immediately and removed after ~8 s. Closing the tab counts as leaving, so opening the site again doesn't put them back (a refresh keeps the seat) | **AWAY** after ~8 s: a bot plays for them                                                                       |
+| Gone quiet (phone in the background, browser killed the tab) | Away after 30 s; guests removed after 1 min, the host keeps the room for 5 min                                                                                  | **AWAY** after 30 s: a bot plays for them                                                                       |
+| Comes back (same device)                                     | A phone that wakes up, or a tab the browser reloads within 5 minutes, re-joins the lobby automatically, unless the host removed them                            | Within 3 minutes, even from a new tab: gets their seat back, the bot stops, and everyone sees "_name_ is back!" |
+| Away for 3 minutes                                           |                                                                                                                                                                 | Counted as **LEFT**; the bot finishes their game, and they're told so when they come back                       |
+| Presses Leave                                                | Removed                                                                                                                                                         | **LEFT** right away                                                                                             |
+
+If only bots and departed players are still racing, the game ends straight away for anyone watching. Finished rooms drop players who closed the tab (after ~8 s) or went quiet for 2 minutes.
 
 ## How it's built
 

@@ -120,10 +120,16 @@ export function coinsFor(state: GameState, me: number): number {
   return (COIN_TABLE[p.rank - 1] ?? 5) + p.stats.captures * 5;
 }
 
+function applySettings(s: Settings) {
+  sound.setSfx(s.sound);
+  sound.setMusic(s.music);
+  setHaptics(s.vibration);
+}
+
 const initial = load();
-sound.setSfx(initial.settings.sound);
-sound.setMusic(initial.settings.music);
-setHaptics(initial.settings.vibration);
+// Save straight away: a first-time player keeps the name made up for them instead of getting a new one each visit.
+save(initial.profile, initial.settings);
+applySettings(initial.settings);
 
 function initialScreen(): Screen {
   try {
@@ -158,9 +164,7 @@ export const useApp = create<AppStore>((set, get) => ({
   updateSettings: (s) => {
     const settings = { ...get().settings, ...s };
     set({ settings });
-    sound.setSfx(settings.sound);
-    sound.setMusic(settings.music);
-    setHaptics(settings.vibration);
+    applySettings(settings);
     save(get().profile, settings);
   },
   startLocal: (cfg, resume) => set({ localConfig: cfg, localResume: resume ?? null, screen: 'game', result: null }),
@@ -191,20 +195,69 @@ export const useApp = create<AppStore>((set, get) => ({
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 }));
 
+// Another tab renamed you or banked coins: pick that up, so this tab never saves stale data over it.
+window.addEventListener('storage', (e) => {
+  if (e.key !== KEY || !e.newValue) return;
+  const { profile, settings } = load();
+  useApp.setState({ profile, settings });
+  applySettings(settings);
+});
+
+const SECRET_KEY = 'ludo-pals:secret'; // this tab's identity (survives refreshes)
+const LAST_SECRET_KEY = 'ludo-pals:last-secret'; // the device's most recent identity
+const aliveKey = (secret: string) => `ludo-pals:alive:${secret}`; // "a tab is using this right now"
+const ALIVE_EVERY_MS = 5_000;
+// Background tabs may only get timers once a minute, so allow a generous margin before calling it dead.
+const ALIVE_STALE_MS = 75_000;
+
+function newSecret() {
+  return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+let cachedSecret: string | null = null;
+
 /**
- * A random secret identifying this browser tab to the game server. It never appears in room
- * data (players are shown by a separate public id), so nobody can act on your behalf.
+ * The secret identifying this player to the game server. It never appears in room data
+ * (players are shown by a separate public id), so nobody can act on your behalf.
+ *
+ * It survives refreshes, and closing the tab too: a new tab adopts the device's last identity
+ * when no other open tab is using it, so someone who closed the tab (or whose phone killed the
+ * browser) can get back to their game. Two tabs open at the same time still get separate
+ * identities, which keeps two-player testing on one machine possible.
  */
 export function tabSecret(): string {
-  const k = 'ludo-pals:secret';
+  if (cachedSecret) return cachedSecret;
   try {
-    let id = sessionStorage.getItem(k);
-    if (!id) {
-      id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-      sessionStorage.setItem(k, id);
+    let secret = sessionStorage.getItem(SECRET_KEY);
+    if (!secret) {
+      const last = localStorage.getItem(LAST_SECRET_KEY);
+      const aliveAt = last ? Number(localStorage.getItem(aliveKey(last)) ?? 0) : 0;
+      secret = last && Date.now() - aliveAt > ALIVE_STALE_MS ? last : newSecret();
+      sessionStorage.setItem(SECRET_KEY, secret);
     }
-    return id;
+    const mine = secret;
+    const markAlive = () => {
+      try {
+        localStorage.setItem(aliveKey(mine), String(Date.now()));
+        localStorage.setItem(LAST_SECRET_KEY, mine);
+      } catch {
+        /* ignore */
+      }
+    };
+    markAlive();
+    setInterval(markAlive, ALIVE_EVERY_MS);
+    // Closing (or refreshing) frees the identity at once; a refresh simply picks it up again.
+    window.addEventListener('pagehide', () => {
+      try {
+        localStorage.removeItem(aliveKey(mine));
+      } catch {
+        /* ignore */
+      }
+    });
+    window.addEventListener('pageshow', markAlive);
+    cachedSecret = mine;
   } catch {
-    return `anon-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+    cachedSecret = `anon-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
   }
+  return cachedSecret;
 }
