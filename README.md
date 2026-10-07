@@ -9,7 +9,7 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 - **Bots.** Pick how many humans are playing and bots fill the table up to 4 (adjustable, up to 6). Three skill levels: Chill, Normal, Savage. Normal and Savage play deterministically (same position and roll, same move).
 - **Pass & play.** Several humans can share one device; humans are seated apart and the game announces whose turn it is. Local games save automatically, so a refresh or a closed tab can be picked up again with "Continue your game".
 - **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving, and a rematch only includes people who are actually there. See [Leaving and coming back](#leaving-and-coming-back).
-- **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars.
+- **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars. Dropped links reconnect by themselves, and a TURN relay covers strict networks (see [Voice relay](#voice-relay-turn-recommended)).
 - **Chat and emotes.** Quick-chat phrases, free text, and floating emoji reactions. Bots react too 😎.
 - **Six Pals.** Cherry, Mossy, Sunny, Splash, Boo and Blaze. Each has a bio and catchphrase, and their faces change mood when they roll a six, get bonked, or win.
 - **Juice.** 3D dice, hop-by-hop token movement, BONK bursts and screen shake, home-run sparkles, confetti, haptics on Android, synthesized SFX and a music loop.
@@ -81,7 +81,20 @@ npm run dev
 
 For preview deployments, generate a **Preview** deploy key in Convex and add it as `CONVEX_DEPLOY_KEY` scoped to **Preview**; each branch then gets its own isolated backend.
 
-Optional: on strict networks (some mobile carriers) peer-to-peer voice can fail without a relay. Set `VITE_TURN_URL`, `VITE_TURN_USER` and `VITE_TURN_PASS` in Vercel to use a TURN server. Public STUN is used by default, which covers most home Wi-Fi.
+### Voice relay (TURN), recommended
+
+Voice is peer-to-peer: every pair of players connects directly. Many networks, especially mobile data and some offices, don't allow that, so without a relay a group of four can end up with only some pairs hearing each other. A TURN relay carries the audio for those pairs (the others stay direct).
+
+The easy option is Cloudflare's TURN service. The first 1,000 GB a month are free, and a relayed pair of players uses roughly 40 MB an hour.
+
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/?to=/:account/calls), open **Realtime → TURN Server** and create a TURN key. Copy its **key ID** and **API token**.
+2. In the [Convex dashboard](https://dashboard.convex.dev), open the **Production** deployment → **Settings → Environment Variables** and add `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN`.
+
+That's all; no redeploy is needed. Players in a room get short-lived relay credentials from the server when they join voice.
+
+Using another TURN provider instead? Set `TURN_URLS` (comma-separated), `TURN_USERNAME` and `TURN_CREDENTIAL` in the Convex environment variables. (`VITE_TURN_URL`, `VITE_TURN_USER` and `VITE_TURN_PASS` in Vercel still work too, but they put the credentials in the public app bundle.)
+
+Each player's mic icon shows whether your audio link to them is working: it pulses while connecting and turns red if it can't connect, and the app keeps retrying in the background.
 
 ### Capacity and cost
 

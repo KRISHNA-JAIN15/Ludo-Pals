@@ -1,8 +1,9 @@
-import { X } from 'lucide-react';
+import { Mic, MicOff, X } from 'lucide-react';
 import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { CHARACTERS } from '../../shared/characters';
 import type { CharacterId } from '../../shared/types';
 import { sound } from '../audio/sound';
+import type { LinkState } from '../net/voice';
 import { Mascot, type Mood } from './Mascot';
 
 type BtnVariant = 'black' | 'teal' | 'white' | 'ghost' | 'yellow' | 'danger';
@@ -274,4 +275,31 @@ export function DiceGlyph({ size = 20, pips = 5, color = 'currentColor' }: { siz
 
 export function Topo({ className }: { className?: string }) {
   return <span className={['topo', className].filter(Boolean).join(' ')} aria-hidden />;
+}
+
+/** A player's voice status: in voice, muted, and (for others) whether our audio link to them works. */
+export function VoiceMic({ muted, link, size }: { muted: boolean; link?: LinkState; size: number }) {
+  if (link === 'failed') {
+    return (
+      <span
+        className="chip-mic is-broken"
+        title="No audio connection yet. Their network may be blocking it; still retrying."
+        role="img"
+        aria-label="No audio connection"
+      >
+        <MicOff size={size} />
+      </span>
+    );
+  }
+  const cls = `chip-mic ${muted ? 'is-muted' : ''} ${link === 'connecting' ? 'is-linking' : ''}`;
+  return (
+    <span
+      className={cls}
+      title={link === 'connecting' ? 'Connecting audio…' : muted ? 'Muted' : 'In voice'}
+      role="img"
+      aria-label={muted ? 'Muted' : 'In voice'}
+    >
+      {muted ? <MicOff size={size} /> : <Mic size={size} />}
+    </span>
+  );
 }

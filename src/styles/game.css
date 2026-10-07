@@ -820,6 +820,24 @@
   color: var(--muted);
 }
 
+.chip-mic {
+  display: inline-flex;
+}
+
+.chip-mic.is-linking {
+  animation: mic-linking 1.2s ease-in-out infinite;
+}
+
+.chip-mic.is-broken {
+  color: var(--red);
+}
+
+@keyframes mic-linking {
+  50% {
+    opacity: 0.25;
+  }
+}
+
 .chip-tokens {
   display: flex;
   gap: 3px;

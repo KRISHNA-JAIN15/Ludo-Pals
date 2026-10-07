@@ -29,7 +29,8 @@ import { Board, yardScreenPositions } from '../components/Board';
 import { ChatPanel } from '../components/ChatPanel';
 import { Dice } from '../components/Dice';
 import { Mascot, type Mood } from '../components/Mascot';
-import { Avatar, Btn, IconBtn, Sheet, Toggle } from '../components/ui';
+import { Avatar, Btn, IconBtn, Sheet, Toggle, VoiceMic } from '../components/ui';
+import type { LinkState } from '../net/voice';
 import { useBoardAnimation } from '../game/useBoardAnimation';
 import { ordinal, useGameFeed, type Banner } from '../game/useGameFeed';
 import { useOnline, type FloatingEmote } from '../net/online';
@@ -230,6 +231,8 @@ function GameView({ ctl }: { ctl: GameCtl }) {
   const muted = useOnline((s) => s.muted);
   const deafened = useOnline((s) => s.deafened);
   const speaking = useOnline((s) => s.speaking);
+  const voiceLinks = useOnline((s) => s.voiceLinks);
+  const myId = useOnline((s) => s.myId);
   const [pending, setPending] = useState(false);
   const [tray, setTray] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -349,7 +352,7 @@ function GameView({ ctl }: { ctl: GameCtl }) {
             mood={feed.moods[slot.player]}
             deadline={slot.player === state.turn ? deadline : null}
             speaking={!!speaking[pl.id]}
-            voice={seat ? { inVoice: seat.inVoice, muted: seat.muted } : null}
+            voice={seat ? { inVoice: seat.inVoice, muted: seat.muted, link: voiceOn && seat.id !== myId ? voiceLinks[seat.id] : undefined } : null}
             emotes={ctl.emotes.filter((e) => e.from === pl.id)}
             where={where}
           />
@@ -622,7 +625,7 @@ function PlayerChip({
   mood?: Mood;
   deadline: number | null;
   speaking: boolean;
-  voice: { inVoice: boolean; muted: boolean } | null;
+  voice: { inVoice: boolean; muted: boolean; link?: LinkState } | null;
   emotes: FloatingEmote[];
   where: 'top' | 'bottom';
 }) {
@@ -682,7 +685,7 @@ function PlayerChip({
             )
           )}
           {player.kind === 'bot' && <Bot size={12} className="chip-bot" />}
-          {voice?.inVoice && (voice.muted ? <MicOff size={11} className="chip-mic is-muted" /> : <Mic size={11} className="chip-mic" />)}
+          {voice?.inVoice && <VoiceMic muted={voice.muted} link={voice.link} size={11} />}
         </span>
         <span className="chip-tokens" aria-label={`${player.tokens.filter((t) => t === fin).length} of ${player.tokens.length} home`}>
           {player.rank > 0 ? (

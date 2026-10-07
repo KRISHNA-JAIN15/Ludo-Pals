@@ -7,7 +7,7 @@ import type { ChatMessage, RoomState, VoiceSignal } from '../../shared/protocol'
 import type { BotLevel, CharacterId, DiceMode, GameState, ModeId } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { HOST_FEE, tabSecret, useApp } from '../store/app';
-import { VoiceChat } from './voice';
+import { VoiceChat, type LinkState } from './voice';
 
 export interface FloatingEmote {
   key: number | string;
@@ -32,6 +32,8 @@ interface OnlineStore {
   muted: boolean;
   deafened: boolean;
   speaking: Record<string, boolean>;
+  /** How our audio link to each other player in voice is doing. */
+  voiceLinks: Record<string, LinkState>;
   connect: () => void;
   create: (p: { maxPlayers: number; mode: ModeId; turnSeconds: number; dice: DiceMode }) => Promise<boolean>;
   join: (code: string) => Promise<boolean>;
@@ -190,7 +192,7 @@ export const useOnline = create<OnlineStore>((set, get) => {
     voice?.leave();
     voice = null;
     handledSignals.clear();
-    set({ voiceOn: false, muted: false, deafened: false, speaking: {} });
+    set({ voiceOn: false, muted: false, deafened: false, speaking: {}, voiceLinks: {} });
   };
 
   const unsubscribeRoom = () => {
@@ -225,11 +227,8 @@ export const useOnline = create<OnlineStore>((set, get) => {
       noteRoom();
     }
     if (voice) {
-      // Peers who left voice (or the room) hang up.
-      for (const s of prev?.seats ?? []) {
-        const now = room.seats.find((x) => x.id === s.id);
-        if (s.inVoice && (!now || !now.inVoice) && s.id !== get().myId) voice.drop(s.id);
-      }
+      // Keep a link to everyone in voice (and hang up on anyone who left it).
+      voice.setExpected(room.seats.filter((s) => s.inVoice && s.connected).map((s) => s.id));
       // The server dropped us from voice (tab slept, network blip): announce ourselves again.
       if (mine && !mine.inVoice && get().voiceOn && !voiceRejoining) {
         voiceRejoining = true;
@@ -357,6 +356,7 @@ export const useOnline = create<OnlineStore>((set, get) => {
     leave: () => void client?.mutation(api.voice.leave, { secret }).catch(() => {}),
     mute: (muted: boolean) => void client?.mutation(api.voice.mute, { secret, muted }).catch(() => {}),
     send: (to: string, data: VoiceSignal) => void client?.mutation(api.voice.signal, { secret, to, data }).catch(() => {}),
+    iceServers: async () => (await client!.action(api.voice.iceServers, { secret })) as RTCIceServer[],
   };
 
   const onSignals = (rows: { id: Id<'signals'>; from: string; data: VoiceSignal }[]) => {
@@ -383,6 +383,7 @@ export const useOnline = create<OnlineStore>((set, get) => {
     muted: false,
     deafened: false,
     speaking: {},
+    voiceLinks: {},
 
     connect: () => {
       if (client) return;
@@ -458,7 +459,12 @@ export const useOnline = create<OnlineStore>((set, get) => {
       if (!client || voice || get().voiceBusy) return;
       set({ voiceBusy: true });
       handledSignals.clear();
-      const v = new VoiceChat(voiceTransport, get().myId, (speaking) => set({ speaking }));
+      const v = new VoiceChat(
+        voiceTransport,
+        get().myId,
+        (speaking) => set({ speaking }),
+        (voiceLinks) => set({ voiceLinks }),
+      );
       voice = v; // incoming offers may arrive while we are still joining
       inboxSub = client.onUpdate(
         api.voice.inbox,

@@ -5,7 +5,8 @@ import type { RoomSeat } from '../../shared/protocol';
 import { sound } from '../audio/sound';
 import { ChatPanel } from '../components/ChatPanel';
 import { Mascot } from '../components/Mascot';
-import { Avatar, Btn, Coin, IconBtn, Segmented } from '../components/ui';
+import { Avatar, Btn, Coin, IconBtn, Segmented, VoiceMic } from '../components/ui';
+import type { LinkState } from '../net/voice';
 import { useOnline } from '../net/online';
 import { HOST_FEE, useApp } from '../store/app';
 
@@ -17,6 +18,7 @@ export function Lobby() {
   const muted = useOnline((s) => s.muted);
   const deafened = useOnline((s) => s.deafened);
   const speaking = useOnline((s) => s.speaking);
+  const voiceLinks = useOnline((s) => s.voiceLinks);
   const status = useOnline((s) => s.status);
   const o = useOnline.getState();
   const go = useApp((s) => s.go);
@@ -47,6 +49,7 @@ export function Lobby() {
   const taken = new Map(room.seats.map((s) => [s.character, s]));
   const link = `${location.origin}${location.pathname}?room=${room.code}`;
   const notReady = room.seats.filter((s) => s.kind === 'human' && s.connected && !s.ready);
+  const unreachable = voiceOn ? room.seats.filter((s) => voiceLinks[s.id] === 'failed').map((s) => s.name) : [];
   const canStart = room.seats.length >= 2 && notReady.length === 0;
   const canPay = coins >= HOST_FEE; // the host pays for each match
 
@@ -125,6 +128,7 @@ export function Lobby() {
               isHost={s.id === room.hostId}
               canKick={isHost && s.id !== myId}
               speaking={!!speaking[s.id]}
+              link={voiceOn && s.id !== myId ? voiceLinks[s.id] : undefined}
               onKick={() => o.removeSeat(s.id)}
             />
           ) : (
@@ -196,6 +200,11 @@ export function Lobby() {
             </Btn>
           )}
         </div>
+        {unreachable.length > 0 && (
+          <p className="hint">
+            Can&apos;t connect audio with {unreachable.join(', ')} yet. A strict network (often mobile data) may be blocking it; still retrying.
+          </p>
+        )}
       </section>
 
       {isHost && (
@@ -332,6 +341,7 @@ function SeatTile({
   isHost,
   canKick,
   speaking,
+  link,
   onKick,
 }: {
   seat: RoomSeat;
@@ -339,6 +349,7 @@ function SeatTile({
   isHost: boolean;
   canKick: boolean;
   speaking: boolean;
+  link?: LinkState;
   onKick: () => void;
 }) {
   const meta = CHARACTERS[seat.character];
@@ -366,7 +377,7 @@ function SeatTile({
             <Bot size={11} /> BOT
           </span>
         )}
-        {seat.inVoice && (seat.muted ? <MicOff size={13} className="chip-mic is-muted" /> : <Mic size={13} className="chip-mic" />)}
+        {seat.inVoice && <VoiceMic muted={seat.muted} link={link} size={13} />}
         {!seat.connected && <WifiOff size={13} />}
       </span>
       <span className={`seat-ready ${seat.ready ? 'is-ready' : ''} ${seat.connected ? '' : 'is-away'}`}>

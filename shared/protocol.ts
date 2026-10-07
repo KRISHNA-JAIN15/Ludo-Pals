@@ -41,10 +41,15 @@ export interface ChatMessage {
   system?: boolean;
 }
 
+/**
+ * Voice signaling between two players. `cid` identifies one peer connection, so messages left
+ * over from a connection that was replaced are ignored. `hello` asks the other side to call.
+ */
 export type VoiceSignal =
-  | { kind: 'offer'; sdp: string }
-  | { kind: 'answer'; sdp: string }
-  | { kind: 'ice'; candidate: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null } };
+  | { kind: 'hello' }
+  | { kind: 'offer'; sdp: string; cid: string }
+  | { kind: 'answer'; sdp: string; cid: string }
+  | { kind: 'ice'; cid: string; candidate: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null } };
 
 export const EMOTES = ['😂', '😡', '😭', '🔥', '👏', '😎', '🤯', '🙏', '💀', '❤️'];
 export const QUICK_CHAT = ['Nice move!', 'Hurry up! ⏱️', 'Oops 😅', 'Good game!', 'Not again 😩', 'Revenge time 😈', 'Lucky roll!', 'Well played 👏'];

@@ -1,10 +1,11 @@
 import { v } from 'convex/values';
-import { mutation, query, type QueryCtx } from './_generated/server';
+import { internal } from './_generated/api';
+import { action, internalQuery, mutation, query, type QueryCtx } from './_generated/server';
 import { deleteSignalsTo, memberBySecret, requireMember, roomByCode } from './lib';
 
 /**
- * Voice chat is peer-to-peer WebRTC; Convex only relays the signaling (offers, answers, ICE).
- * Whoever joins voice last calls everyone already in it, so each pair has exactly one caller.
+ * Voice chat is peer-to-peer WebRTC; Convex only relays the signaling (offers, answers, ICE)
+ * and hands out relay (TURN) credentials. In each pair the player with the smaller id calls.
  */
 export const join = mutation({
   args: { secret: v.string() },
@@ -82,5 +83,82 @@ export const ack = mutation({
       const row = await ctx.db.get(id);
       if (row && row.to === m.playerId) await ctx.db.delete(id);
     }
+  },
+});
+
+export const isMember = internalQuery({
+  args: { secret: v.string() },
+  handler: async (ctx, { secret }): Promise<boolean> => !!(await memberBySecret(ctx, secret)),
+});
+
+interface IceServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
+
+/** Keep only well-formed servers, minus port 53, which browsers block (it only slows connecting). */
+function cleanIceServers(raw: unknown): IceServer[] {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : [];
+  const out: IceServer[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const { urls, username, credential } = item as Record<string, unknown>;
+    const all = (Array.isArray(urls) ? urls : [urls]).filter((u): u is string => typeof u === 'string');
+    const kept = all.filter((u) => !/:53(\?|$)/.test(u));
+    if (!kept.length) continue;
+    out.push({
+      urls: kept,
+      ...(typeof username === 'string' ? { username } : {}),
+      ...(typeof credential === 'string' ? { credential } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * Relay (TURN) servers for voice. Without one, players on strict networks (many mobile carriers,
+ * some offices) can't reach each other directly, so a group ends up hearing only some players.
+ * Set one of these in the Convex deployment's environment variables:
+ * - CLOUDFLARE_TURN_KEY_ID and CLOUDFLARE_TURN_API_TOKEN: short-lived Cloudflare credentials (recommended)
+ * - TURN_URLS (comma-separated), TURN_USERNAME and TURN_CREDENTIAL: any other TURN server
+ * Only room members get credentials. Returns [] when nothing is configured (direct calls only).
+ */
+export const iceServers = action({
+  args: { secret: v.string() },
+  handler: async (ctx, { secret }): Promise<IceServer[]> => {
+    const member: boolean = await ctx.runQuery(internal.voice.isMember, { secret });
+    if (!member) return [];
+    const keyId = process.env.CLOUDFLARE_TURN_KEY_ID;
+    const token = process.env.CLOUDFLARE_TURN_API_TOKEN;
+    if (keyId && token) {
+      try {
+        const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ttl: 86_400 }),
+        });
+        if (res.ok) {
+          const body: unknown = await res.json();
+          const servers = cleanIceServers(body && typeof body === 'object' ? (body as { iceServers?: unknown }).iceServers : null);
+          if (servers.length) return servers;
+        }
+        console.error(`Cloudflare TURN credentials request failed: HTTP ${res.status}`);
+      } catch (err) {
+        console.error('Cloudflare TURN credentials request failed', err);
+      }
+    }
+    const urls = process.env.TURN_URLS;
+    if (urls) {
+      return cleanIceServers({
+        urls: urls
+          .split(',')
+          .map((u: string) => u.trim())
+          .filter(Boolean),
+        username: process.env.TURN_USERNAME,
+        credential: process.env.TURN_CREDENTIAL,
+      });
+    }
+    return [];
   },
 });
