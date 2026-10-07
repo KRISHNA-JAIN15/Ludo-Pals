@@ -62,7 +62,13 @@ export function Setup() {
   const profile = useApp((s) => s.profile);
   const settings = useApp((s) => s.settings);
   const startLocal = useApp((s) => s.startLocal);
-  const [mode, setMode] = useState<ModeId>(() => (sessionStorage.getItem('ludo-pals:mode') as ModeId) || 'classic');
+  const [mode, setMode] = useState<ModeId>(() => {
+    try {
+      return sessionStorage.getItem('ludo-pals:mode') === 'quick' ? 'quick' : 'classic';
+    } catch {
+      return 'classic';
+    }
+  });
   const [humans, setHumans] = useState(1);
   const [bots, setBots] = useState(3);
   const [level, setLevel] = useState<BotLevel>('normal');

@@ -33,6 +33,7 @@ import { Avatar, Btn, IconBtn, Sheet, Toggle } from '../components/ui';
 import { useBoardAnimation } from '../game/useBoardAnimation';
 import { ordinal, useGameFeed, type Banner } from '../game/useGameFeed';
 import { useOnline, type FloatingEmote } from '../net/online';
+import { clearLocalGame, saveLocalGame, type SavedGame } from '../store/localSave';
 import { HowToPlay } from './Hub';
 import { useApp } from '../store/app';
 
@@ -60,7 +61,7 @@ export interface GameCtl {
 // ---------------------------------------------------------------------------
 // Controllers
 
-function useLocalCtl(cfg: MatchConfig | null): GameCtl {
+function useLocalCtl(cfg: MatchConfig | null, resume: SavedGame | null): GameCtl {
   const [state, setState] = useState<GameState | null>(null);
   const [paused, setPaused] = useState(false);
   const [gen, setGen] = useState(0);
@@ -76,9 +77,22 @@ function useLocalCtl(cfg: MatchConfig | null): GameCtl {
 
   useEffect(() => {
     if (!cfg) return;
+    // Continue a saved game only on the first mount; "Restart" (gen > 0) always starts fresh.
+    const saved = gen === 0 ? resume : null;
+    let lastSave = 0;
+    const persist = (s: GameState) => {
+      if (s.phase === 'over') clearLocalGame();
+      else saveLocalGame({ cfg, state: s, seed: m.gameSeed, savedAt: Date.now() });
+    };
     const m = new Match(cfg, {
+      seed: saved?.seed,
       onState: (s) => {
         setState(s);
+        // Save at most once a second (plus on page hide below) so a refresh can resume the game.
+        if (s.phase === 'over' || Date.now() - lastSave > 1000) {
+          lastSave = Date.now();
+          persist(s);
+        }
         for (const r of botReactions(s)) {
           setTimeout(
             () => {
@@ -94,11 +108,19 @@ function useLocalCtl(cfg: MatchConfig | null): GameCtl {
     match.current = m;
     setPaused(false);
     setState(null);
-    m.start();
+    if (saved) m.resumeFrom(saved.state, saved.savedAt);
+    else m.start();
+    const onHide = () => persist(m.state);
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
     return () => {
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
+      persist(m.state);
       m.destroy();
       if (match.current === m) match.current = null;
     };
+    // `resume` is read once at mount on purpose: it must not restart the match when the store changes.
   }, [cfg, gen, pushEmote]);
 
   const humans = state ? state.players.filter((p) => p.kind === 'human').length : 1;
@@ -172,7 +194,8 @@ function useOnlineCtl(): GameCtl {
 
 export function LocalGame() {
   const cfg = useApp((s) => s.localConfig);
-  const ctl = useLocalCtl(cfg);
+  const resume = useApp((s) => s.localResume);
+  const ctl = useLocalCtl(cfg, resume);
   return <GameView ctl={ctl} />;
 }
 
@@ -229,6 +252,12 @@ function GameView({ ctl }: { ctl: GameCtl }) {
   }, []);
 
   useEffect(() => setPending(false), [state?.rollCount, state?.turn, state?.phase]);
+  // A roll request that never landed (network hiccup) must not lock the dice.
+  useEffect(() => {
+    if (!pending) return;
+    const id = setTimeout(() => setPending(false), 4000);
+    return () => clearTimeout(id);
+  }, [pending]);
 
   const cur: PlayerState | undefined = state?.players[state.turn];
   const myTurn = !!state && !!cur && ctl.controls(state.turn) && cur.kind === 'human' && !cur.auto && state.phase !== 'over';
@@ -417,7 +446,7 @@ function GameView({ ctl }: { ctl: GameCtl }) {
           </div>
           <div className="dock-bubble">
             <span className="dock-name">
-              {cur.name}
+              <span className="dock-name-text">{cur.name}</span>
               {cur.kind === 'bot' && <span className="tag tag--bot">BOT</span>}
               {cur.auto && <span className="tag tag--bot">AUTO</span>}
             </span>

@@ -54,6 +54,7 @@ export const signal = mutation({
   handler: async (ctx, { secret, to, data }) => {
     const { member, room } = await requireMember(ctx, secret);
     if (!room.seats.some((s) => s.id === to && s.kind === 'human')) return;
+    if (JSON.stringify(data ?? null).length > 20_000) return; // offers/answers are a few KB
     await ctx.db.insert('signals', { roomCode: room.code, to, from: member.playerId, data });
   },
 });

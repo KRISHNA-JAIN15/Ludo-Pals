@@ -290,6 +290,10 @@ class SoundEngine {
       [-5, -1, 2],
     ];
     const melody = [12, -1, 16, 19, -1, 16, 14, -1, 12, -1, 9, 12, -1, 16, 14, -1, 9, -1, 12, 14, -1, 12, 9, -1, 7, -1, 11, 14, 12, -1, -1, -1];
+    // Browsers throttle timers in background tabs; skip the notes we missed instead of
+    // firing them all at once when the tab wakes up.
+    if (this.nextNoteTime < ctx.currentTime) this.nextNoteTime = ctx.currentTime + 0.05;
+    if (typeof document !== 'undefined' && document.hidden) return;
     while (this.nextNoteTime < ctx.currentTime + 0.25) {
       const t = this.nextNoteTime - ctx.currentTime;
       const s = this.step % 32;

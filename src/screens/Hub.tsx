@@ -1,11 +1,20 @@
-import { BarChart3, Check, Gamepad2, Globe, HelpCircle, Settings as SettingsIcon, Smile, Trash2, Trophy } from 'lucide-react';
+import { BarChart3, Check, Gamepad2, Globe, HelpCircle, Play, Settings as SettingsIcon, Smile, Trash2, Trophy, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { CHARACTERS, CHARACTER_ORDER } from '../../shared/characters';
+import { CHARACTERS, CHARACTER_ORDER, MODES } from '../../shared/characters';
 import type { CharacterId, ModeId } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Mascot } from '../components/Mascot';
 import { Avatar, Btn, Coin, IconBtn, Segmented, Sheet, Toggle, Topo } from '../components/ui';
 import { useApp, type HubTab } from '../store/app';
+import { clearLocalGame, loadLocalGame } from '../store/localSave';
+
+function timeAgo(t: number) {
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  return h < 24 ? `${h} h ago` : `${Math.round(h / 24)} d ago`;
+}
 
 export function Hub() {
   const tab = useApp((s) => s.tab);
@@ -109,6 +118,8 @@ const CARDS: ModeCard[] = [
 
 function PlayTab({ onHelp }: { onHelp: () => void }) {
   const go = useApp((s) => s.go);
+  const startLocal = useApp((s) => s.startLocal);
+  const [saved, setSaved] = useState(loadLocalGame);
   const [active, setActive] = useState(0);
   const track = useRef<HTMLDivElement>(null);
 
@@ -130,7 +141,11 @@ function PlayTab({ onHelp }: { onHelp: () => void }) {
   const open = (c: ModeCard) => {
     if (c.online) go('online');
     else {
-      sessionStorage.setItem('ludo-pals:mode', c.mode ?? 'classic');
+      try {
+        sessionStorage.setItem('ludo-pals:mode', c.mode ?? 'classic');
+      } catch {
+        /* storage unavailable: setup falls back to Classic */
+      }
       go('setup');
     }
   };
@@ -148,6 +163,34 @@ function PlayTab({ onHelp }: { onHelp: () => void }) {
           <IconBtn icon={<Globe size={20} />} label="Play online" onClick={() => go('online')} />
         </div>
       </div>
+
+      {saved && (
+        <div className="continue-card">
+          <div className="continue-pals">
+            {saved.state.players.map((p) => (
+              <Avatar key={p.id} id={p.character} size={30} />
+            ))}
+          </div>
+          <div className="continue-text">
+            <b>Continue your game</b>
+            <span>
+              {MODES[saved.state.rules.mode].label} · {saved.state.players.length}P · {timeAgo(saved.savedAt)}
+            </span>
+          </div>
+          <Btn size="sm" variant="black" icon={<Play size={14} />} onClick={() => startLocal(saved.cfg, saved)}>
+            Continue
+          </Btn>
+          <IconBtn
+            icon={<X size={16} />}
+            label="Discard saved game"
+            size="sm"
+            onClick={() => {
+              clearLocalGame();
+              setSaved(null);
+            }}
+          />
+        </div>
+      )}
 
       <div className="carousel" ref={track} onScroll={onScroll}>
         {CARDS.map((c, i) => (
@@ -305,7 +348,11 @@ function SettingsTab({ onHelp }: { onHelp: () => void }) {
             className="input"
             value={name}
             maxLength={16}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              // Save as you type: switching tabs doesn't always blur the field first.
+              if (e.target.value.trim()) updateProfile({ name: e.target.value.trim() });
+            }}
             onBlur={() => {
               const n = name.trim() || profile.name;
               setName(n);

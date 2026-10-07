@@ -37,6 +37,8 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
   const bannerId = useRef(0);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const moodTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  /** Delayed effects (dice landing, banners, the jump to results). Cancelled if the screen goes away. */
+  const later = useRef(new Set<ReturnType<typeof setTimeout>>());
   const opts = useRef({ isMine, passAndPlay, onOver });
   opts.current = { isMine, passAndPlay, onOver };
 
@@ -44,6 +46,7 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
     () => () => {
       if (bannerTimer.current) clearTimeout(bannerTimer.current);
       Object.values(moodTimers.current).forEach(clearTimeout);
+      later.current.forEach(clearTimeout);
     },
     [],
   );
@@ -56,11 +59,18 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
     lastKey.current = key;
     if (fresh && !state.events.some((e) => e.type === 'start')) {
       // Joined (or rejoined) mid-game: don't replay old events, but don't strand them on a finished board.
-      if (state.phase === 'over') setTimeout(() => opts.current.onOver(state), 600);
+      if (state.phase === 'over') later.current.add(setTimeout(() => opts.current.onOver(state), 600));
       return;
     }
 
     const { isMine: mine, passAndPlay: pnp, onOver: over } = opts.current;
+    const after = (fn: () => void, ms: number) => {
+      const id = setTimeout(() => {
+        later.current.delete(id);
+        fn();
+      }, ms);
+      later.current.add(id);
+    };
     const name = (i: number) => state.players[i]?.name ?? '';
     const char = (i: number) => state.players[i]?.character;
     const speed = state.speed;
@@ -101,7 +111,7 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
         case 'roll': {
           sound.play('diceShake', { speed });
           const land = TIMING.roll * speed * 0.72;
-          setTimeout(() => {
+          after(() => {
             sound.play('diceLand');
             if (e.value === 6) {
               sound.play('six');
@@ -127,14 +137,14 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
         case 'move': {
           const hopTime = (e.from < 0 ? 1 : e.to - e.from) * TIMING.step * speed;
           if (e.captures.length) {
-            setTimeout(() => {
+            after(() => {
               mood(e.player, 'smug', 2400);
               e.captures.forEach((c) => mood(c.player, 'sad', 2600));
               const victims = [...new Set(e.captures.map((c) => name(c.player)))].join(' & ');
               show({ title: 'BONK!', sub: `${name(e.player)} sent ${victims} home`, tone: 'bonk', character: char(e.player) }, 1700);
             }, hopTime);
           } else if (e.home) {
-            setTimeout(() => {
+            after(() => {
               mood(e.player, 'joy', 2000);
               show({ title: 'Home run!', sub: `${name(e.player)} got a pal home 🏠`, tone: 'home', character: char(e.player) }, 1400);
             }, hopTime);
@@ -144,7 +154,7 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
         case 'finish': {
           const pl = state.players[e.player];
           const meta = CHARACTERS[pl.character];
-          setTimeout(() => {
+          after(() => {
             mood(e.player, 'joy', 4000);
             show(
               {
@@ -174,7 +184,7 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
           const myWin = state.ranking.length > 0 && mine(state.ranking[0]) && state.players[state.ranking[0]].kind === 'human';
           if (myWin) celebrate(Object.values(CHARACTERS).map((c) => c.color));
           else sound.play(state.players.some((p, i) => mine(i) && p.kind === 'human') ? 'lose' : 'win');
-          setTimeout(() => over(state), 2300);
+          after(() => over(state), 2300);
           break;
         }
       }

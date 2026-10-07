@@ -36,6 +36,21 @@ export class Match {
     this.commit();
   }
 
+  /** The game's seed (needed to save and resume it). */
+  get gameSeed() {
+    return this.seed;
+  }
+
+  /**
+   * Continue a saved game (construct with the saved seed first). Time spent away doesn't
+   * count against turn timers or pending transitions.
+   */
+  resumeFrom(saved: GameState, savedAt: number) {
+    this.state = structuredClone(saved);
+    if (!shiftClock(this.state, this.ctx(), Math.max(0, this.now() - savedAt))) this.state.now = this.now();
+    this.commit();
+  }
+
   destroy() {
     this.destroyed = true;
     this.clearTimer();

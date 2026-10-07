@@ -779,6 +779,7 @@
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  overflow: hidden; /* long names and the token dots shrink instead of spilling onto the next chip */
 }
 
 .chip-name {
@@ -786,6 +787,7 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
+  max-width: 100%; /* right-aligned chips must ellipsize at the end, not clip at the start */
   font-weight: 700;
   font-size: 13.5px;
   line-height: 1.1;
@@ -821,6 +823,7 @@
 .chip-tokens {
   display: flex;
   gap: 3px;
+  min-width: 0;
 }
 
 .chip-tokens i {
@@ -1020,6 +1023,16 @@
   font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
+}
+
+.dock-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-name .tag {
+  flex: none;
 }
 
 .dock-status {
@@ -1540,6 +1553,48 @@
     width: 58px;
     height: 58px;
     margin-top: -10px;
+  }
+}
+
+/* narrow phones with six players: compact chips so three fit per row */
+@media (max-width: 400px) {
+  .seat-row--n3 .chip {
+    gap: 4px;
+    padding: 3px 7px 3px 3px;
+  }
+  .seat-row--n3 .chip:last-child {
+    padding: 3px 3px 3px 7px;
+  }
+  .seat-row--n3 .chip-avatar,
+  .seat-row--n3 .chip-avatar .avatar {
+    width: 30px !important;
+    height: 30px !important;
+  }
+  .seat-row--n3 .chip-timer {
+    inset: -6px;
+    width: 42px;
+    height: 42px;
+  }
+  .seat-row--n3 .chip-turn-dot {
+    left: 22px;
+  }
+  .seat-row--n3 .chip:last-child .chip-turn-dot {
+    right: 22px;
+  }
+  .seat-row--n3 .chip-name {
+    font-size: 12px;
+  }
+  .seat-row--n3 .chip-bot,
+  .seat-row--n3 .chip-mic {
+    display: none;
+  }
+  .seat-row--n3 .chip-tokens {
+    gap: 2px;
+  }
+  .seat-row--n3 .chip-tokens i {
+    width: 6px;
+    height: 6px;
+    border-width: 1.2px;
   }
 }
 

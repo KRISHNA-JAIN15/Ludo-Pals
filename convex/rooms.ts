@@ -123,6 +123,7 @@ export const join = mutation({
     if (!room) fail('Room not found. Check the code and try again.');
     const prev = await memberBySecret(ctx, a.secret);
     if (prev?.roomCode === code) return { code }; // already in: just resume
+    if (room.status === 'ended') fail('That game just finished. Ask the host to start a rematch, then join.');
     if (room.status !== 'lobby') fail('That game has already started.');
 
     const seats = [...room.seats];
@@ -231,7 +232,8 @@ export const start = mutation({
   args: { secret: v.string() },
   handler: async (ctx, { secret }) => {
     const { room } = await requireHost(ctx, secret);
-    if (room.status !== 'lobby') fail('The game has already started.');
+    if (room.status === 'playing') return; // a second tap on Start: nothing to do
+    if (room.status !== 'lobby') fail('Start a rematch from the results screen first.');
     if (room.seats.length < MIN_PLAYERS) fail('Need at least 2 players (add a bot!).');
     const waiting = room.seats.filter((s) => s.kind === 'human' && s.connected && !s.ready);
     if (waiting.length) fail(`Waiting for ${waiting.map((s) => s.name).join(', ')} to get ready.`);
@@ -252,10 +254,11 @@ export const start = mutation({
       newId(10),
       ctxStep.now,
     );
-    // Anyone who dropped out of the lobby starts with a bot playing for them.
+    // Anyone who dropped out of the lobby (or somehow has no membership) starts with a bot playing for them.
+    const memberIds = new Set((await membersOf(ctx, room.code)).map((m) => m.playerId));
     for (const p of st.players) {
       const seat = room.seats.find((s) => s.id === p.id);
-      if (seat?.kind === 'human' && !seat.connected) {
+      if (seat?.kind === 'human' && (!seat.connected || !memberIds.has(seat.id))) {
         p.connected = false;
         p.auto = true;
       }

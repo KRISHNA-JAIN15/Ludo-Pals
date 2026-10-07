@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { setHaptics, sound } from '../audio/sound';
 import { finishAt } from '../../shared/board';
 import type { CharacterId, GameState, MatchConfig } from '../../shared/types';
+import type { SavedGame } from './localSave';
 
 export type Screen = 'splash' | 'hub' | 'setup' | 'online' | 'lobby' | 'game' | 'results';
 export type HubTab = 'play' | 'pals' | 'stats' | 'settings';
@@ -47,20 +48,34 @@ interface AppStore {
   profile: Profile;
   settings: Settings;
   localConfig: MatchConfig | null;
+  /** A saved local game to continue instead of starting fresh. */
+  localResume: SavedGame | null;
   result: ResultSummary | null;
   toasts: Toast[];
   go: (screen: Screen) => void;
   setTab: (tab: HubTab) => void;
   updateProfile: (p: Partial<Profile>) => void;
   updateSettings: (s: Partial<Settings>) => void;
-  startLocal: (cfg: MatchConfig) => void;
+  startLocal: (cfg: MatchConfig, resume?: SavedGame) => void;
   finishGame: (r: Omit<ResultSummary, 'coins'>) => void;
   toast: (text: string, tone?: Toast['tone']) => void;
   dismissToast: (id: number) => void;
 }
 
 const KEY = 'ludo-pals:v1';
-const recorded = new Set<string>();
+const RECORDED_KEY = 'ludo-pals:recorded';
+
+/** Games already counted towards stats/coins. Persisted so a refresh on the results screen can't pay out twice. */
+function alreadyRecorded(gameId: string): boolean {
+  try {
+    const ids: string[] = JSON.parse(localStorage.getItem(RECORDED_KEY) ?? '[]');
+    if (ids.includes(gameId)) return true;
+    localStorage.setItem(RECORDED_KEY, JSON.stringify([...ids, gameId].slice(-50)));
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 const defaults = (): { profile: Profile; settings: Settings } => ({
   profile: {
@@ -127,6 +142,7 @@ export const useApp = create<AppStore>((set, get) => ({
   profile: initial.profile,
   settings: initial.settings,
   localConfig: null,
+  localResume: null,
   result: null,
   toasts: [],
   go: (screen) => {
@@ -147,12 +163,11 @@ export const useApp = create<AppStore>((set, get) => ({
     setHaptics(settings.vibration);
     save(get().profile, settings);
   },
-  startLocal: (cfg) => set({ localConfig: cfg, screen: 'game', result: null }),
+  startLocal: (cfg, resume) => set({ localConfig: cfg, localResume: resume ?? null, screen: 'game', result: null }),
   finishGame: (r) => {
     const { state, me } = r;
     let coins = 0;
-    if (me !== null && !recorded.has(state.id)) {
-      recorded.add(state.id);
+    if (me !== null && !alreadyRecorded(state.id)) {
       const p = state.players[me];
       coins = coinsFor(state, me);
       const prof = get().profile;

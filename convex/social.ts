@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { EMOTES, type ChatMessage } from '../shared/protocol';
 import type { CharacterId } from '../shared/types';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
-import { postChat, requireMember } from './lib';
+import { postChat, requireMember, roomByCode } from './lib';
 
 const EMOTE_TTL_MS = 20_000;
 
@@ -78,5 +78,7 @@ export const emote = mutation({
 /** Bots react to bonks and wins (scheduled from saveGame). */
 export const botEmote = internalMutation({
   args: { code: v.string(), from: v.string(), emoji: v.string() },
-  handler: async (ctx, a) => pushEmote(ctx, a.code, a.from, a.emoji),
+  handler: async (ctx, a) => {
+    if (await roomByCode(ctx, a.code)) await pushEmote(ctx, a.code, a.from, a.emoji);
+  },
 });

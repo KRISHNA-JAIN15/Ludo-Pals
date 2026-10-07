@@ -1,5 +1,5 @@
 import { Bot, Check, Copy, Crown, Headphones, HeadphoneOff, Mic, MicOff, Phone, PhoneOff, Plus, Share2, UserX, WifiOff, X } from 'lucide-react';
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { CHARACTERS, CHARACTER_ORDER, DICE_MODES, MODES } from '../../shared/characters';
 import type { RoomSeat } from '../../shared/protocol';
 import { sound } from '../audio/sound';
@@ -22,6 +22,8 @@ export function Lobby() {
   const go = useApp((s) => s.go);
   const toast = useApp((s) => s.toast);
   const updateProfile = useApp((s) => s.updateProfile);
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false); // synchronous guard: two taps can land before a re-render
 
   useEffect(() => sound.wantMusic(true), []);
 
@@ -268,7 +270,21 @@ export function Lobby() {
       <div className="sticky-cta">
         {isHost ? (
           <>
-            <Btn variant="black" size="lg" full onClick={() => void o.start()} disabled={room.seats.length < 2}>
+            <Btn
+              variant="black"
+              size="lg"
+              full
+              onClick={() => {
+                if (startingRef.current) return;
+                startingRef.current = true;
+                setStarting(true);
+                void o.start().finally(() => {
+                  startingRef.current = false;
+                  setStarting(false);
+                });
+              }}
+              disabled={room.seats.length < 2 || starting}
+            >
               {canStart
                 ? `Start game (${room.seats.length} players)`
                 : room.seats.length < 2

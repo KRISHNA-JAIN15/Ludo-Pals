@@ -707,6 +707,7 @@ code {
   overflow-y: auto;
   background: var(--cream);
   border-radius: 30px 30px 0 0;
+  overscroll-behavior: contain; /* don't scroll the page behind the sheet */
   padding: 10px 18px calc(22px + var(--safe-bottom));
   box-shadow: 0 -20px 50px -20px rgba(0, 0, 0, 0.4);
   animation: sheet-up 0.38s var(--ease-pop) both;

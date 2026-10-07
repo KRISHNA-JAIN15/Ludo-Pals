@@ -7,8 +7,8 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 - **2–6 players.** 2–4 players use the classic cross board; 5–6 players get a six-armed hex board.
 - **Fair, deterministic dice.** By default every player rolls from their own shuffled "bag": each number 1–6 comes up exactly once in every six rolls, so nobody waits 20 turns for a six and luck evens out, like the balanced dice of online Ludo apps. Every game has a seed: dice, bot choices and who goes first all derive from it, so a game replays identically from its seed. Pick **Lucky** dice for classic pure chance.
 - **Bots.** Pick how many humans are playing and bots fill the table up to 4 (adjustable, up to 6). Three skill levels: Chill, Normal, Savage. Normal and Savage play deterministically (same position and roll, same move).
-- **Pass & play.** Several humans can share one device; humans are seated apart and the game announces whose turn it is.
-- **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving, and if someone disconnects, goes idle or closes their tab, a bot plays their pals until they come back. Refreshing the page rejoins the game.
+- **Pass & play.** Several humans can share one device; humans are seated apart and the game announces whose turn it is. Local games save automatically, so a refresh or a closed tab can be picked up again with "Continue your game".
+- **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving. If someone loses connection or goes idle, they show as AWAY and a bot plays for them until they're back; if they leave (or close the tab), everyone sees them as LEFT and a bot finishes their game. Lobbies and finished rooms drop people who've gone, so a rematch only includes who's actually there. Refreshing the page rejoins the game.
 - **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars.
 - **Chat and emotes.** Quick-chat phrases, free text, and floating emoji reactions. Bots react too 😎.
 - **Six Pals.** Cherry, Mossy, Sunny, Splash, Boo and Blaze. Each has a bio and catchphrase, and their faces change mood when they roll a six, get bonked, or win.
@@ -66,6 +66,7 @@ Vercel's Hobby plan serves the static app for free. Convex's free plan includes 
 ## Where data lives
 
 - **Your name, chosen Pal, coins, wins, trophies and settings** are stored in your browser's `localStorage` (key `ludo-pals:v1`). Every player's device keeps its own, so any number of people can play at once without clashing, and deploying a new version doesn't touch it. It doesn't follow you to another browser or phone, and clearing site data resets it.
+- **A local game in progress** is saved in `localStorage` (`ludo-pals:local-game`) so it survives a refresh; finished games are cleared. The ids of games already counted towards your coins are kept too, so refreshing a results screen can't pay out twice.
 - **Rooms, seats, the live game, chat and emotes** live in Convex while a room is open. Rooms are deleted automatically about 10 minutes after the last player leaves. Nothing about finished games is kept.
 - **Which room this tab is in** is a random per-tab secret in `sessionStorage`, which is how a refresh rejoins your game.
 

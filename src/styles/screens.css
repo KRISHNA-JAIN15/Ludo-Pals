@@ -255,6 +255,43 @@
   gap: 10px;
 }
 
+.continue-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 24px;
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+  animation: tile-in 0.35s var(--ease-pop) both;
+}
+
+.continue-pals {
+  display: flex;
+  flex: none;
+}
+
+.continue-pals .avatar + .avatar {
+  margin-left: -10px;
+}
+
+.continue-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.continue-text span {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .carousel {
   display: flex;
   gap: 16px;
