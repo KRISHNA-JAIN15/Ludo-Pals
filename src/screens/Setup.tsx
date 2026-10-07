@@ -1,7 +1,7 @@
 import { ArrowLeft, Bot, Dices, RefreshCw, User } from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
-import { BOT_NAMES, CHARACTERS, CHARACTER_ORDER, MODES } from '../../shared/characters';
-import type { BotLevel, CharacterId, MatchConfig, ModeId, SeatKind } from '../../shared/types';
+import { BOT_NAMES, CHARACTERS, CHARACTER_ORDER, DICE_MODES, MODES } from '../../shared/characters';
+import type { BotLevel, CharacterId, DiceMode, MatchConfig, ModeId, SeatKind } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Mascot } from '../components/Mascot';
 import { Avatar, Btn, IconBtn, Segmented } from '../components/ui';
@@ -67,6 +67,7 @@ export function Setup() {
   const [bots, setBots] = useState(3);
   const [level, setLevel] = useState<BotLevel>('normal');
   const [timer, setTimer] = useState(0);
+  const [dice, setDice] = useState<DiceMode>('fair');
   const [seats, setSeats] = useState<SeatDraft[]>(() => buildSeats([], 1, 3, profile));
 
   const total = humans + bots;
@@ -113,7 +114,7 @@ export function Setup() {
         kind: s.kind,
         botLevel: level,
       })),
-      rules: { ...MODES[mode].rules, autoMove: settings.autoMove, turnSeconds: timer },
+      rules: { ...MODES[mode].rules, autoMove: settings.autoMove, turnSeconds: timer, dice },
       speed: settings.speed === 'fast' ? 0.6 : 1,
     };
     startLocal(cfg);
@@ -216,6 +217,15 @@ export function Setup() {
             />
           </div>
         )}
+        <div className="field">
+          <span className="field-label">Dice</span>
+          <Segmented
+            value={dice}
+            onChange={setDice}
+            options={(['fair', 'classic'] as const).map((d) => ({ value: d, label: DICE_MODES[d].label }))}
+          />
+          <span className="hint">{DICE_MODES[dice].blurb}</span>
+        </div>
         <div className="field">
           <span className="field-label">Turn timer</span>
           <Segmented

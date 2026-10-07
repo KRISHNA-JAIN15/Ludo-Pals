@@ -1,4 +1,4 @@
-import type { BotLevel, CharacterId, ModeId, SeatKind } from './types';
+import type { BotLevel, CharacterId, DiceMode, ModeId, SeatKind } from './types';
 
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 6;
@@ -26,6 +26,7 @@ export interface RoomState {
   mode: ModeId;
   turnSeconds: number;
   botLevel: BotLevel;
+  dice: DiceMode;
   status: 'lobby' | 'playing' | 'ended';
   seats: RoomSeat[];
 }

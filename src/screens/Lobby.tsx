@@ -1,6 +1,6 @@
 import { Bot, Check, Copy, Crown, Headphones, HeadphoneOff, Mic, MicOff, Phone, PhoneOff, Plus, Share2, UserX, WifiOff, X } from 'lucide-react';
 import { useEffect, type CSSProperties } from 'react';
-import { CHARACTERS, CHARACTER_ORDER, MODES } from '../../shared/characters';
+import { CHARACTERS, CHARACTER_ORDER, DICE_MODES, MODES } from '../../shared/characters';
 import type { RoomSeat } from '../../shared/protocol';
 import { sound } from '../audio/sound';
 import { ChatPanel } from '../components/ChatPanel';
@@ -106,7 +106,8 @@ export function Lobby() {
           </span>
         </button>
         <span className="room-meta">
-          {MODES[room.mode].label} · {room.turnSeconds ? `${room.turnSeconds}s turns` : 'no timer'} · {room.seats.length}/{room.maxPlayers} players
+          {MODES[room.mode].label} · {DICE_MODES[room.dice ?? 'fair'].label} dice · {room.turnSeconds ? `${room.turnSeconds}s turns` : 'no timer'} ·{' '}
+          {room.seats.length}/{room.maxPlayers} players
         </span>
       </section>
 
@@ -222,6 +223,15 @@ export function Lobby() {
               onChange={(v) => o.settings({ turnSeconds: v })}
               options={[10, 15, 20, 30].map((n) => ({ value: n, label: `${n}s` }))}
             />
+          </div>
+          <div className="field">
+            <span className="field-label">Dice</span>
+            <Segmented
+              value={room.dice ?? 'fair'}
+              onChange={(v) => o.settings({ dice: v })}
+              options={(['fair', 'classic'] as const).map((d) => ({ value: d, label: DICE_MODES[d].label }))}
+            />
+            <span className="hint">{DICE_MODES[room.dice ?? 'fair'].blurb}</span>
           </div>
           <div className="field">
             <span className="field-label">Bot skill</span>

@@ -58,12 +58,15 @@ export function Results() {
   const headline = mine && humansHere === 1 ? (mine.rank === 1 ? 'You won!' : `You finished ${ordinal(mine.rank)}`) : `${ranked[0]?.name} wins!`;
   const sub = mine && humansHere === 1 && mine.rank === 1 ? 'Absolute legend. The pals bow to you 👑' : 'GG! Every pal made it… eventually.';
 
+  // Awards need a clear leader (no prize for a tie).
   const most = (key: 'captures' | 'sixes') => {
     const best = Math.max(...state.players.map((p) => p.stats[key]));
-    return best > 0 ? state.players.find((p) => p.stats[key] === best) : undefined;
+    const leaders = state.players.filter((p) => p.stats[key] === best);
+    return best > 0 && leaders.length === 1 ? leaders[0] : undefined;
   };
   const bonkKing = most('captures');
-  const lucky = most('sixes');
+  // With fair dice everyone rolls the same numbers, so "luckiest" means nothing.
+  const lucky = state.rules.dice === 'fair' ? undefined : most('sixes');
   const stickers = (p: PlayerState) => {
     const out: string[] = [];
     if (p.rank === 1) out.push('WINNER');
@@ -82,6 +85,7 @@ export function Results() {
         <span className="results-kicker">GAME OVER</span>
         <h1 className="title-xl">{headline}</h1>
         <p className="muted">{sub}</p>
+        {state.rules.dice === 'fair' && <p className="fair-note">🎲 Fair dice: equal luck for everyone</p>}
       </header>
 
       <section className={`podium podium--${podium.length}`}>

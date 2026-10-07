@@ -1231,6 +1231,18 @@
   margin-top: 8px;
 }
 
+.results-head .fair-note {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  box-shadow: var(--shadow-sm);
+}
+
 .podium {
   display: grid;
   grid-template-columns: 1fr 1.18fr 1fr;

@@ -2,10 +2,13 @@ export type CharacterId = 'cherry' | 'sunny' | 'splash' | 'mossy' | 'boo' | 'bla
 export type BotLevel = 'easy' | 'normal' | 'hard';
 export type SeatKind = 'human' | 'bot';
 export type ModeId = 'classic' | 'quick';
+/** fair: balanced, seeded dice (each face once every six rolls); classic: independent random rolls. */
+export type DiceMode = 'fair' | 'classic';
 export type Mood = 'idle' | 'happy' | 'sad' | 'shock' | 'smug' | 'think';
 
 export interface Rules {
   mode: ModeId;
+  dice: DiceMode;
   /** Tokens per player (2-4). */
   tokens: number;
   /** Dice values that release a token from the yard. */
@@ -41,6 +44,8 @@ export interface PlayerStats {
   captured: number;
   sixes: number;
   moves: number;
+  /** Rolls made so far (fair dice reads the player's sequence at this index). */
+  rolls: number;
 }
 
 export interface PlayerState {

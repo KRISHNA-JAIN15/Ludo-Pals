@@ -1,4 +1,4 @@
-import type { CharacterId, ModeId, Rules } from './types';
+import type { CharacterId, DiceMode, ModeId, Rules } from './types';
 
 export interface CharacterMeta {
   id: CharacterId;
@@ -102,6 +102,7 @@ export interface ModeMeta {
 }
 
 const base = {
+  dice: 'fair' as DiceMode,
   extraOnSix: true,
   extraOnCapture: true,
   extraOnHome: true,
@@ -130,3 +131,8 @@ export function pickBotName(taken: string[], seed = Math.random()): string {
   const pool = free.length ? free : BOT_NAMES;
   return pool[Math.floor(seed * pool.length) % pool.length];
 }
+
+export const DICE_MODES: Record<DiceMode, { label: string; blurb: string }> = {
+  fair: { label: 'Fair', blurb: 'Balanced dice: every player rolls each number once in every 6 rolls. Skill decides.' },
+  classic: { label: 'Lucky', blurb: 'Old-school random dice. Anything can happen.' },
+};

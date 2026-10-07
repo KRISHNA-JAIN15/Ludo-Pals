@@ -1,8 +1,8 @@
 import { ArrowLeft, LogIn, Plus, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { CHARACTERS, CHARACTER_ORDER } from '../../shared/characters';
+import { CHARACTERS, CHARACTER_ORDER, DICE_MODES } from '../../shared/characters';
 import { ROOM_CODE_LENGTH } from '../../shared/protocol';
-import type { ModeId } from '../../shared/types';
+import type { DiceMode, ModeId } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Mascot } from '../components/Mascot';
 import { Avatar, Btn, IconBtn, Segmented, Topo } from '../components/ui';
@@ -26,6 +26,7 @@ export function Online() {
   const [maxPlayers, setMax] = useState(4);
   const [mode, setMode] = useState<ModeId>('classic');
   const [timer, setTimer] = useState(20);
+  const [dice, setDice] = useState<DiceMode>('fair');
   const [code, setCode] = useState(urlRoom);
   const [name, setName] = useState(profile.name);
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
@@ -66,7 +67,7 @@ export function Online() {
     saveName();
     sound.unlock();
     setBusy('create');
-    await create({ maxPlayers, mode, turnSeconds: timer });
+    await create({ maxPlayers, mode, turnSeconds: timer, dice });
     setBusy(null);
   };
 
@@ -174,6 +175,15 @@ export function Online() {
               { value: 'quick', label: 'Quick' },
             ]}
           />
+        </div>
+        <div className="field">
+          <span className="field-label">Dice</span>
+          <Segmented
+            value={dice}
+            onChange={setDice}
+            options={(['fair', 'classic'] as const).map((d) => ({ value: d, label: DICE_MODES[d].label }))}
+          />
+          <span className="hint">{DICE_MODES[dice].blurb}</span>
         </div>
         <div className="field">
           <span className="field-label">Turn timer</span>

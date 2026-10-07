@@ -2,8 +2,9 @@ import { ConvexError } from 'convex/values';
 import { CHARACTERS, CHARACTER_ORDER, pickBotName } from '../shared/characters';
 import { MAX_PLAYERS, MIN_PLAYERS, type RoomSeat, type RoomState } from '../shared/protocol';
 import { botReactions } from '../shared/reactions';
+import { hashSeed } from '../shared/random';
 import { markLeft, setConnected, type StepCtx } from '../shared/rules';
-import type { BotLevel, CharacterId, GameState, ModeId } from '../shared/types';
+import type { BotLevel, CharacterId, DiceMode, GameState, ModeId } from '../shared/types';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
@@ -31,7 +32,17 @@ export function fail(message: string): never {
   throw new ConvexError(message);
 }
 
-export const stepCtx = (): StepCtx => ({ now: Date.now(), rng: Math.random });
+export const stepCtx = (seed: number): StepCtx => ({ now: Date.now(), seed });
+
+/** A game's seed (games created before seeds existed get a stable one from their id). */
+export function seedOf(game: Doc<'games'>): number {
+  if (game.seed !== undefined) return game.seed;
+  let h = 0;
+  for (const ch of game._id) h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
+  return hashSeed(h);
+}
+
+export const isDice = (d: unknown): d is DiceMode => d === 'fair' || d === 'classic';
 
 export function newId(len = 12): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -59,6 +70,7 @@ export function toRoomState(room: Doc<'rooms'>): RoomState {
     mode: room.mode as ModeId,
     turnSeconds: room.turnSeconds,
     botLevel: room.botLevel as BotLevel,
+    dice: isDice(room.dice) ? room.dice : 'fair',
     status: room.status,
     seats: room.seats as RoomSeat[],
   };
@@ -184,7 +196,7 @@ export async function setPlayerConnected(ctx: MutationCtx, room: Doc<'rooms'>, p
   const game = await gameFor(ctx, room.code);
   if (!game) return;
   const st = game.state as GameState;
-  if (setConnected(st, stepCtx(), playerId, connected)) await saveGame(ctx, game._id, room, st);
+  if (setConnected(st, stepCtx(seedOf(game)), playerId, connected)) await saveGame(ctx, game._id, room, st);
 }
 
 async function setPlayerLeft(ctx: MutationCtx, room: Doc<'rooms'>, playerId: string) {
@@ -192,7 +204,7 @@ async function setPlayerLeft(ctx: MutationCtx, room: Doc<'rooms'>, playerId: str
   const game = await gameFor(ctx, room.code);
   if (!game) return;
   const st = game.state as GameState;
-  if (markLeft(st, stepCtx(), playerId)) await saveGame(ctx, game._id, room, st);
+  if (markLeft(st, stepCtx(seedOf(game)), playerId)) await saveGame(ctx, game._id, room, st);
 }
 
 // ---------------------------------------------------------------- leaving & cleanup

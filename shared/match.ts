@@ -1,11 +1,13 @@
 import { createGame, humanMove, humanRoll, runPending, setAuto, setConnected, shiftClock, startGame, type StepCtx } from './rules';
+import { newSeed } from './random';
 import type { GameState, MatchConfig } from './types';
 
 export { TIMING, moveDuration } from './rules';
 
 export interface MatchHooks {
   onState: (state: GameState) => void;
-  random?: () => number;
+  /** Fixed seed (tests, replays); a fresh one otherwise. */
+  seed?: number;
   now?: () => number;
   /** End the game once only bots are left racing (default true). */
   endWhenOnlyBots?: boolean;
@@ -18,13 +20,13 @@ export class Match {
   private paused = false;
   private pausedAt = 0;
   private destroyed = false;
-  private rng: () => number;
+  private seed: number;
   private now: () => number;
   private hooks: MatchHooks;
 
   constructor(cfg: MatchConfig, hooks: MatchHooks) {
     this.hooks = hooks;
-    this.rng = hooks.random ?? Math.random;
+    this.seed = hooks.seed ?? newSeed();
     this.now = hooks.now ?? Date.now;
     this.state = createGame(cfg, Math.random().toString(36).slice(2, 10), this.now());
   }
@@ -77,7 +79,7 @@ export class Match {
   // ---------------------------------------------------------------------------
 
   private ctx(): StepCtx {
-    return { now: this.now(), rng: this.rng, endWhenOnlyBots: this.hooks.endWhenOnlyBots };
+    return { now: this.now(), seed: this.seed, endWhenOnlyBots: this.hooks.endWhenOnlyBots };
   }
 
   private step(fn: () => boolean, evenWhenPaused = false): boolean {

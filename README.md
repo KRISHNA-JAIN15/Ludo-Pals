@@ -5,7 +5,8 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 ## Features
 
 - **2–6 players.** 2–4 players use the classic cross board; 5–6 players get a six-armed hex board.
-- **Bots.** Pick how many humans are playing and bots fill the table up to 4 (adjustable, up to 6). Three skill levels: Chill, Normal, Savage.
+- **Fair, deterministic dice.** By default every player rolls from their own shuffled "bag": each number 1–6 comes up exactly once in every six rolls, so nobody waits 20 turns for a six and luck evens out, like the balanced dice of online Ludo apps. Every game has a seed: dice, bot choices and who goes first all derive from it, so a game replays identically from its seed. Pick **Lucky** dice for classic pure chance.
+- **Bots.** Pick how many humans are playing and bots fill the table up to 4 (adjustable, up to 6). Three skill levels: Chill, Normal, Savage. Normal and Savage play deterministically (same position and roll, same move).
 - **Pass & play.** Several humans can share one device; humans are seated apart and the game announces whose turn it is.
 - **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving, and if someone disconnects, goes idle or closes their tab, a bot plays their pals until they come back. Refreshing the page rejoins the game.
 - **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars.
@@ -26,6 +27,8 @@ Rules: roll a 6 to leave the yard (Quick mode: 1 or 6). Rolling a 6, capturing, 
 | Profiles, coins, trophies, settings             | Each player's browser            | `localStorage`, see [Where data lives](#where-data-lives).                                                 |
 
 Why not a server on Vercel? Vercel Functions can now hold WebSockets (beta), but each connection is cut at the function's max duration (5 minutes on Hobby), different players can land on different instances, and there's no built-in timer to run bot turns. A Ludo game needs one authoritative game state, timers and broadcast, which Convex provides. Vercel lists it among its recommended realtime backends.
+
+Online games keep their seed on the server, outside the state sent to players, so nobody can work out upcoming rolls.
 
 The rules engine (`shared/rules.ts`) is a pure state machine. Local games run it in the browser (`shared/match.ts`); online games run the same code inside Convex mutations, with Convex's scheduler firing bot turns and turn timers. Local and online play follow identical rules, and online play is server-authoritative: dice are rolled on the server.
 
@@ -68,14 +71,14 @@ Vercel's Hobby plan serves the static app for free. Convex's free plan includes 
 
 ## Scripts
 
-| Command              | What it does                                               |
-| -------------------- | ---------------------------------------------------------- |
-| `npm run dev`        | Vite + Convex dev backend with hot reload                  |
-| `npm run build`      | Type-check and build the app into `dist/`                  |
-| `npm run typecheck`  | TypeScript check (app, shared engine and Convex functions) |
-| `npm run sim -- 200` | Plays 200 headless bot games and checks rule invariants    |
-| `npm run format`     | Prettier                                                   |
-| `npm run gen:topo`   | Regenerates the topographic background pattern             |
+| Command              | What it does                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `npm run dev`        | Vite + Convex dev backend with hot reload                                           |
+| `npm run build`      | Type-check and build the app into `dist/`                                           |
+| `npm run typecheck`  | TypeScript check (app, shared engine and Convex functions)                          |
+| `npm run sim -- 200` | Plays 200 headless bot games: rule invariants, fair-dice balance, same-seed replays |
+| `npm run format`     | Prettier                                                                            |
+| `npm run gen:topo`   | Regenerates the topographic background pattern                                      |
 
 ## Project layout
 
@@ -84,6 +87,7 @@ shared/        Game logic shared by the browser and Convex
   board.ts       Radial board geometry (4-arm cross and 6-arm hex)
   engine.ts      Move rules, captures, threat detection
   bot.ts         Bot move scoring (easy / normal / hard)
+  random.ts      Seeded PRNG and fair-dice bags
   rules.ts       Turn state machine (pure: bonuses, timers, auto-play) with scheduled "pending" transitions
   match.ts       Runs rules.ts in the browser for local games (setTimeout + pause)
 convex/        Online backend: schema, rooms & lobby, game actions + scheduler, chat/emotes, voice signaling

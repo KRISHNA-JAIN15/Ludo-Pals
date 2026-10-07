@@ -24,6 +24,8 @@ export default defineSchema({
     mode: v.string(),
     turnSeconds: v.number(),
     botLevel: v.string(),
+    /** 'fair' (default) or 'classic' dice — see shared/random.ts. */
+    dice: v.optional(v.string()),
     status: v.union(v.literal('lobby'), v.literal('playing'), v.literal('ended')),
     seats: v.array(seatValidator),
     /** When the last human went quiet; the room is deleted after a while. */
@@ -64,6 +66,8 @@ export default defineSchema({
   games: defineTable({
     roomCode: v.string(),
     state: v.any(),
+    /** Seed for dice and bot choices. Kept out of `state` so players can't predict rolls. */
+    seed: v.optional(v.number()),
   }).index('by_room', ['roomCode']),
 
   chat: defineTable({

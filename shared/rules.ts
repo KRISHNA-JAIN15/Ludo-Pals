@@ -9,6 +9,7 @@
 import { finishAt, globalIndex, isSafe, lastTrack, layoutFor } from './board';
 import { chooseMove } from './bot';
 import { capturesAt, movableTokens, targetOf, totalProgress } from './engine';
+import { fairDie, hashSeed, mulberry32 } from './random';
 import type { GameEvent, GameState, MatchConfig, PendingKind, PlayerState } from './types';
 
 /** Base timings in ms (multiplied by the match speed). Clients use the same numbers to animate. */
@@ -31,10 +32,18 @@ export function moveDuration(from: number, to: number, captured: boolean, home: 
 
 export interface StepCtx {
   now: number;
-  rng: () => number;
+  /** The game's seed: dice, bot choices and who goes first all derive from it. */
+  seed: number;
   /** End the game once only bots are left racing (default true). */
   endWhenOnlyBots?: boolean;
 }
+
+/** A step's context plus its random stream, derived from (seed, step number): fully reproducible. */
+interface Ctx extends StepCtx {
+  rng: () => number;
+}
+
+const withRng = (st: GameState, ctx: StepCtx): Ctx => ({ ...ctx, rng: mulberry32(hashSeed(ctx.seed, st.seq, 0x51ed)) });
 
 export function createGame(cfg: MatchConfig, id: string, now: number): GameState {
   const { arms, seats } = layoutFor(cfg.seats.length);
@@ -51,7 +60,7 @@ export function createGame(cfg: MatchConfig, id: string, now: number): GameState
     connected: true,
     left: false,
     timeouts: 0,
-    stats: { captures: 0, captured: 0, sixes: 0, moves: 0 },
+    stats: { captures: 0, captured: 0, sixes: 0, moves: 0, rolls: 0 },
   }));
   return {
     id,
@@ -77,7 +86,7 @@ export function createGame(cfg: MatchConfig, id: string, now: number): GameState
 }
 
 export function startGame(st: GameState, ctx: StepCtx, firstPlayer?: number) {
-  const first = firstPlayer ?? Math.floor(ctx.rng() * st.players.length);
+  const first = firstPlayer ?? Math.floor(withRng(st, ctx).rng() * st.players.length);
   beginTurn(st, ctx, first, false, [{ type: 'start' }]);
 }
 
@@ -85,7 +94,7 @@ export function startGame(st: GameState, ctx: StepCtx, firstPlayer?: number) {
 export function humanRoll(st: GameState, ctx: StepCtx, playerId: string): boolean {
   const pl = st.players[st.turn];
   if (st.phase !== 'roll' || pl.id !== playerId || pl.kind === 'bot') return false;
-  doRoll(st, ctx, reclaim(st, pl));
+  doRoll(st, withRng(st, ctx), reclaim(st, pl));
   return true;
 }
 
@@ -151,9 +160,10 @@ export function markLeft(st: GameState, ctx: StepCtx, playerId: string): boolean
 }
 
 /** Fire the pending transition. Returns true if the state changed. */
-export function runPending(st: GameState, ctx: StepCtx): boolean {
+export function runPending(st: GameState, stepCtx: StepCtx): boolean {
   const p = st.pending;
   if (!p) return false;
+  const ctx = withRng(st, stepCtx);
   st.pending = null;
   const cur = st.players[st.turn];
   switch (p.kind) {
@@ -253,7 +263,7 @@ function schedulePhase(st: GameState, ctx: StepCtx) {
   }
 }
 
-function timeout(st: GameState, ctx: StepCtx) {
+function timeout(st: GameState, ctx: Ctx) {
   const pl = st.players[st.turn];
   pl.timeouts++;
   const pre: GameEvent[] = [];
@@ -283,9 +293,12 @@ function nextTurn(st: GameState, ctx: StepCtx) {
   }
 }
 
-function doRoll(st: GameState, ctx: StepCtx, pre: GameEvent[] = []) {
+function doRoll(st: GameState, ctx: Ctx, pre: GameEvent[] = []) {
   const p = st.turn;
-  const value = 1 + Math.floor(ctx.rng() * 6);
+  const pl = st.players[p];
+  const rolls = pl.stats.rolls ?? 0;
+  const value = st.rules.dice === 'fair' ? fairDie(ctx.seed, p, rolls) : 1 + Math.floor(ctx.rng() * 6);
+  pl.stats.rolls = rolls + 1;
   st.sixStreak = value === 6 ? st.sixStreak + 1 : 0;
   if (value === 6) st.players[p].stats.sixes++;
   st.dice = value;

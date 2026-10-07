@@ -398,6 +398,11 @@ function SettingsTab({ onHelp }: { onHelp: () => void }) {
 export function HowToPlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   const rules: [string, string, string][] = [
     ['🎲', 'Roll a 6 to start', 'Tokens wait in their yard until you roll a 6 (Quick mode: a 1 or a 6).'],
+    [
+      '⚖️',
+      'Fair dice',
+      'By default every player rolls each number exactly once in every 6 rolls, so nobody waits forever for a six and luck evens out. Pick "Lucky" dice for pure chance.',
+    ],
     ['🏃', 'Race clockwise', 'Move around the board and up your coloured lane to the centre.'],
     ['💥', 'Bonk!', 'Land on an opponent to send them back to their yard — and earn a bonus roll.'],
     ['⭐', 'Safe squares', 'Starred squares and start squares are safe. Nobody can bonk you there.'],

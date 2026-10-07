@@ -300,7 +300,7 @@ function GameView({ ctl }: { ctl: GameCtl }) {
   const speed = state.speed;
   const status = statusLine(state, cur, myTurn, ctl, feed.quip, movable.length);
   const meAuto = state.phase !== 'over' && state.players.some((p, i) => ctl.controls(i) && p.kind === 'human' && p.auto);
-  const modeLabel = `${MODES[state.rules.mode].label} · ${state.players.length}P`;
+  const modeLabel = `${MODES[state.rules.mode].label} · ${state.players.length}P · ${state.rules.dice === 'fair' ? 'Fair' : 'Lucky'} dice`;
   const seatOf = (id: string) => room?.seats.find((s) => s.id === id);
 
   const renderRow = (row: typeof rows.top, where: 'top' | 'bottom') => (

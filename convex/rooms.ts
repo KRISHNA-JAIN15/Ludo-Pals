@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 import { MODES } from '../shared/characters';
 import { MIN_PLAYERS, ROOM_CODE_LENGTH, TURN_OPTIONS } from '../shared/protocol';
+import { newSeed } from '../shared/random';
 import { createGame, startGame } from '../shared/rules';
 import type { BotLevel, CharacterId } from '../shared/types';
 import { internal } from './_generated/api';
@@ -24,6 +25,7 @@ import {
   gameFor,
   humanSeat,
   isCharacter,
+  isDice,
   isLevel,
   isMode,
   leaveRoom,
@@ -78,7 +80,15 @@ export const get = query({
 // ---------------------------------------------------------------- lobby
 
 export const create = mutation({
-  args: { secret: v.string(), name: v.string(), character: v.string(), maxPlayers: v.number(), mode: v.string(), turnSeconds: v.number() },
+  args: {
+    secret: v.string(),
+    name: v.string(),
+    character: v.string(),
+    maxPlayers: v.number(),
+    mode: v.string(),
+    turnSeconds: v.number(),
+    dice: v.optional(v.string()),
+  },
   handler: async (ctx, a) => {
     if (!isCharacter(a.character) || !isMode(a.mode)) fail('Invalid room settings.');
     const prev = await memberBySecret(ctx, a.secret);
@@ -93,6 +103,7 @@ export const create = mutation({
       mode: a.mode,
       turnSeconds: TURN_OPTIONS.includes(a.turnSeconds) ? a.turnSeconds : 20,
       botLevel: 'normal',
+      dice: isDice(a.dice) ? a.dice : 'fair',
       status: 'lobby',
       seats: [humanSeat(playerId, name, a.character, true)],
       emptySince: null,
@@ -164,6 +175,7 @@ export const settings = mutation({
     mode: v.optional(v.string()),
     turnSeconds: v.optional(v.number()),
     botLevel: v.optional(v.string()),
+    dice: v.optional(v.string()),
   },
   handler: async (ctx, a) => {
     const { room } = await requireHost(ctx, a.secret);
@@ -180,6 +192,7 @@ export const settings = mutation({
       patch.maxPlayers = Math.max(max, seats.length);
     }
     if (isMode(a.mode)) patch.mode = a.mode;
+    if (isDice(a.dice)) patch.dice = a.dice;
     if (a.turnSeconds !== undefined && TURN_OPTIONS.includes(a.turnSeconds)) patch.turnSeconds = a.turnSeconds;
     if (isLevel(a.botLevel)) {
       patch.botLevel = a.botLevel;
@@ -223,7 +236,8 @@ export const start = mutation({
     const waiting = room.seats.filter((s) => s.kind === 'human' && s.connected && !s.ready);
     if (waiting.length) fail(`Waiting for ${waiting.map((s) => s.name).join(', ')} to get ready.`);
 
-    const ctxStep = stepCtx();
+    const seed = newSeed();
+    const ctxStep = stepCtx(seed);
     const st = createGame(
       {
         seats: room.seats.map((s) => ({
@@ -233,7 +247,7 @@ export const start = mutation({
           kind: s.kind,
           botLevel: (s.botLevel ?? room.botLevel) as BotLevel,
         })),
-        rules: { ...MODES[room.mode as 'classic' | 'quick'].rules, turnSeconds: room.turnSeconds },
+        rules: { ...MODES[room.mode as 'classic' | 'quick'].rules, turnSeconds: room.turnSeconds, dice: isDice(room.dice) ? room.dice : 'fair' },
       },
       newId(10),
       ctxStep.now,
@@ -250,7 +264,7 @@ export const start = mutation({
 
     const old = await gameFor(ctx, room.code);
     if (old) await ctx.db.delete(old._id);
-    const gameId = await ctx.db.insert('games', { roomCode: room.code, state: st });
+    const gameId = await ctx.db.insert('games', { roomCode: room.code, state: st, seed });
     await ctx.db.patch(room._id, { status: 'playing' });
     const fresh = (await ctx.db.get(room._id))!;
     await saveGame(ctx, gameId, fresh, st);
