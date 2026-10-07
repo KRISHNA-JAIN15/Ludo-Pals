@@ -2,14 +2,25 @@ import { ConvexError } from 'convex/values';
 import { CHARACTERS, CHARACTER_ORDER, pickBotName } from '../shared/characters';
 import { MAX_PLAYERS, MIN_PLAYERS, type RoomSeat, type RoomState } from '../shared/protocol';
 import { botReactions } from '../shared/reactions';
-import { setConnected, type StepCtx } from '../shared/rules';
+import { markLeft, setConnected, type StepCtx } from '../shared/rules';
 import type { BotLevel, CharacterId, GameState, ModeId } from '../shared/types';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 
+/** No heartbeat for this long: shown as away (in a game, a bot plays for them). */
 export const HEARTBEAT_STALE_MS = 30_000;
-export const LOBBY_DROP_MS = 60_000;
+/**
+ * Silent this long: removed from a lobby / finished room. Long on purpose: phones pause
+ * background tabs, and a host sharing the code in another app must not lose the room.
+ * Closing the tab is detected much faster through the goodbye beacon (GONE_GRACE_MS).
+ */
+export const LOBBY_DROP_MS = 5 * 60_000;
+export const ENDED_DROP_MS = 2 * 60_000;
+/** After the page-close beacon, wait this long for a heartbeat (a refresh) before treating them as gone. */
+export const GONE_GRACE_MS = 12_000;
+/** A closed tab can never reclaim its seat (its identity lived in that tab), so mid-game it becomes "left". */
+export const GONE_LEFT_MS = 45_000;
 export const EMPTY_ROOM_TTL_MS = 10 * 60_000;
 export const SWEEP_EVERY_MS = 10_000;
 
@@ -158,7 +169,11 @@ export const system = (ctx: MutationCtx, code: string, text: string) =>
 export async function saveGame(ctx: MutationCtx, gameId: Id<'games'>, room: Doc<'rooms'>, st: GameState) {
   await ctx.db.patch(gameId, { state: st });
   if (st.pending) await ctx.scheduler.runAt(st.pending.at, internal.game.advance, { gameId, seq: st.seq });
-  if (st.phase === 'over' && room.status === 'playing') await ctx.db.patch(room._id, { status: 'ended' });
+  if (st.phase === 'over' && room.status === 'playing') {
+    // The match is over: people who left during it are gone from the room now too.
+    const fresh = await ctx.db.get(room._id);
+    if (fresh) await ctx.db.patch(room._id, { status: 'ended', seats: fresh.seats.filter((s) => !s.left) });
+  }
   for (const r of botReactions(st)) {
     await ctx.scheduler.runAfter(r.delay, internal.social.botEmote, { code: room.code, from: st.players[r.player].id, emoji: r.emoji });
   }
@@ -172,10 +187,24 @@ export async function setPlayerConnected(ctx: MutationCtx, room: Doc<'rooms'>, p
   if (setConnected(st, stepCtx(), playerId, connected)) await saveGame(ctx, game._id, room, st);
 }
 
+async function setPlayerLeft(ctx: MutationCtx, room: Doc<'rooms'>, playerId: string) {
+  if (room.status !== 'playing') return;
+  const game = await gameFor(ctx, room.code);
+  if (!game) return;
+  const st = game.state as GameState;
+  if (markLeft(st, stepCtx(), playerId)) await saveGame(ctx, game._id, room, st);
+}
+
 // ---------------------------------------------------------------- leaving & cleanup
 
 /** Remove a member from their room (leave, kick or timeout). Closes the room when no humans remain. */
-export async function leaveRoom(ctx: MutationCtx, member: Doc<'members'>) {
+/**
+ * Remove a member from their room: leave button, kick, closed tab or long silence.
+ * In a running game the seat stays (marked `left`, a bot plays it); anywhere else it is removed.
+ * Hands the host role on, and closes the room when no humans remain.
+ */
+export async function leaveRoom(ctx: MutationCtx, member: Doc<'members'>, how: 'left' | 'removed' | 'timedOut' = 'left') {
+  if (!(await ctx.db.get(member._id))) return; // already gone (e.g. the room closed earlier in this sweep)
   await ctx.db.delete(member._id);
   const ping = await presenceOf(ctx, member.playerId);
   if (ping) await ctx.db.delete(ping._id);
@@ -184,22 +213,28 @@ export async function leaveRoom(ctx: MutationCtx, member: Doc<'members'>) {
   if (!room) return;
 
   const seat = room.seats.find((s) => s.id === member.playerId);
-  let seats = room.seats;
-  if (room.status === 'playing' && seat) {
-    // Keep the seat in the running game; a bot plays it from now on.
-    seats = seats.map((s) => (s.id === member.playerId ? { ...s, connected: false, inVoice: false, muted: false } : s));
-    await setPlayerConnected(ctx, room, member.playerId, false);
-  } else {
-    seats = seats.filter((s) => s.id !== member.playerId);
-  }
-  if (seat) await system(ctx, room.code, `${seat.name} left`);
-
   const remaining = await membersOf(ctx, room.code);
   if (!remaining.length) {
     await closeRoom(ctx, room.code);
     return;
   }
-  let hostId = room.hostId;
+
+  if (room.status === 'playing' && seat) {
+    // Mark the game first: it may end right here if only bots are left racing.
+    await setPlayerLeft(ctx, room, member.playerId);
+  }
+  // Re-read: the game may have just ended (status 'ended', departed seats already dropped).
+  const fresh = (await ctx.db.get(room._id))!;
+  let seats =
+    fresh.status === 'playing'
+      ? fresh.seats.map((s) => (s.id === member.playerId ? { ...s, connected: false, left: true, inVoice: false, muted: false } : s))
+      : fresh.seats.filter((s) => s.id !== member.playerId);
+  if (seat) {
+    const verb = how === 'removed' ? 'was removed' : how === 'timedOut' ? 'disconnected and left' : 'left';
+    await system(ctx, room.code, `${seat.name} ${verb}${fresh.status === 'playing' ? ' — a bot will finish their game' : ''}`);
+  }
+
+  let hostId = fresh.hostId;
   if (hostId === member.playerId) {
     const next = remaining.find((m) => m.connected) ?? remaining[0];
     hostId = next.playerId;
@@ -207,9 +242,7 @@ export async function leaveRoom(ctx: MutationCtx, member: Doc<'members'>) {
     const nextSeat = seats.find((s) => s.id === hostId);
     if (nextSeat) await system(ctx, room.code, `${nextSeat.name} is now the host`);
   }
-  // Re-read: setPlayerConnected may have flipped the room to 'ended'.
-  const fresh = await ctx.db.get(room._id);
-  if (fresh) await ctx.db.patch(room._id, { seats, hostId });
+  await ctx.db.patch(room._id, { seats, hostId });
 }
 
 export async function deleteSignalsTo(ctx: MutationCtx, playerId: string) {

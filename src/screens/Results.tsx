@@ -72,6 +72,9 @@ export function Results() {
     return out;
   };
   const isHost = online && room?.hostId === myId;
+  // Who has gone: left during the match, or left the room since it ended.
+  const stillHere = new Set(room?.seats.filter((x) => !x.left).map((x) => x.id) ?? []);
+  const hasLeft = (p: PlayerState) => p.left || (online && !!room && p.kind === 'human' && p.id !== myId && !stillHere.has(p.id));
 
   return (
     <div className="screen results">
@@ -91,7 +94,10 @@ export function Results() {
               style={{ '--c': meta.color, '--cl': meta.light, '--cd': meta.dark } as CSSProperties}
             >
               <span className="podium-rank">{ordinal(p.rank)}</span>
-              <span className="podium-name">{p.name}</span>
+              <span className="podium-name">
+                {p.name}
+                {hasLeft(p) && <span className="left-note"> · left</span>}
+              </span>
               <div className="podium-pal">
                 <Mascot
                   id={p.character}
@@ -123,7 +129,10 @@ export function Results() {
             <Avatar id={p.character} size={40} />
             <div className="rank-who">
               <span className="rank-pos">{ordinal(p.rank)}</span>
-              <b>{mine?.id === p.id && humansHere === 1 ? 'You' : p.name}</b>
+              <b>
+                {mine?.id === p.id && humansHere === 1 ? 'You' : p.name}
+                {hasLeft(p) && <span className="tag tag--left rank-left">LEFT</span>}
+              </b>
             </div>
             <span className="rank-stats">
               💥 {p.stats.captures} {p.stats.captures === 1 ? 'bonk' : 'bonks'} · 🎲 {p.stats.sixes} {p.stats.sixes === 1 ? 'six' : 'sixes'}

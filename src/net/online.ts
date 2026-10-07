@@ -56,6 +56,9 @@ interface OnlineStore {
 
 const ROOM_KEY = 'ludo-pals:room';
 const CONVEX_URL: string | undefined = import.meta.env.VITE_CONVEX_URL || undefined;
+/** Where Convex HTTP actions live: https://x.convex.cloud → https://x.convex.site (local dev sets it explicitly). */
+const SITE_URL: string | undefined =
+  import.meta.env.VITE_CONVEX_SITE_URL || (CONVEX_URL?.includes('.convex.cloud') ? CONVEX_URL.replace('.convex.cloud', '.convex.site') : undefined);
 const HEARTBEAT_MS = 10_000;
 
 const secret = tabSecret();
@@ -66,6 +69,7 @@ let currentCode: string | null = null;
 let leaving = false;
 let voice: VoiceChat | null = null;
 let voiceRejoining = false;
+let clearingStaleVoice = false;
 let emotesPrimed = false;
 const seenEmotes = new Set<string>();
 const handledSignals = new Set<string>();
@@ -148,6 +152,7 @@ export const useOnline = create<OnlineStore>((set, get) => {
     set({ room });
     if (prev && room.seats.length > prev.seats.length) sound.play('join');
 
+    const mine = room.seats.find((s) => s.id === get().myId);
     if (voice) {
       // Peers who left voice (or the room) hang up.
       for (const s of prev?.seats ?? []) {
@@ -155,11 +160,17 @@ export const useOnline = create<OnlineStore>((set, get) => {
         if (s.inVoice && (!now || !now.inVoice) && s.id !== get().myId) voice.drop(s.id);
       }
       // The server dropped us from voice (tab slept, network blip): announce ourselves again.
-      const mine = room.seats.find((s) => s.id === get().myId);
       if (mine && !mine.inVoice && get().voiceOn && !voiceRejoining) {
         voiceRejoining = true;
         void voice.rejoin().finally(() => (voiceRejoining = false));
       }
+    } else if (mine?.inVoice && !get().voiceBusy && !clearingStaleVoice && client) {
+      // We were in voice before a refresh; that call is gone, so stop showing us as in it.
+      clearingStaleVoice = true;
+      void client
+        .mutation(api.voice.leave, { secret })
+        .catch(() => {})
+        .finally(() => (clearingStaleVoice = false));
     }
 
     const { screen, go } = app();
@@ -280,9 +291,21 @@ export const useOnline = create<OnlineStore>((set, get) => {
       client.subscribeToConnectionState((s) =>
         set({ status: s.isWebSocketConnected ? 'online' : s.hasEverConnected || s.connectionRetries > 2 ? 'offline' : 'connecting' }),
       );
+      // Back from a refresh: say we're here before anything else, cancelling the goodbye beacon.
+      if (hadRoom()) client.mutation(api.rooms.heartbeat, { secret }).catch(() => {});
       client.onUpdate(api.rooms.me, { secret }, onMembership, () => {});
       setInterval(beat, HEARTBEAT_MS);
       document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && beat());
+      // Closing the tab: tell the server right away so others see it within seconds.
+      // (If this is only a refresh, the reloaded page's heartbeat cancels it.)
+      window.addEventListener('pagehide', () => {
+        if (!currentCode || !SITE_URL) return;
+        try {
+          navigator.sendBeacon(`${SITE_URL}/bye`, secret);
+        } catch {
+          /* best effort */
+        }
+      });
     },
 
     create: async (p) => {

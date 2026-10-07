@@ -678,6 +678,25 @@
   opacity: 0.6;
 }
 
+.chip--left {
+  opacity: 0.7;
+}
+
+.chip--left .chip-name-text {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.tag--left {
+  background: #c2353b;
+  color: #fff;
+}
+
+.tag--away {
+  background: var(--cream-3);
+  color: var(--ink-2);
+}
+
 .chip-avatar {
   position: relative;
   flex: none;

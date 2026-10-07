@@ -1123,6 +1123,10 @@
   color: var(--teal);
 }
 
+.seat-ready.is-away {
+  color: #c2353b;
+}
+
 .seat-tile.is-me {
   box-shadow:
     0 0 0 3px var(--ink),
@@ -1425,6 +1429,18 @@
   font-size: 12px;
   font-weight: 600;
   opacity: 0.65;
+}
+
+.rank-left {
+  margin-left: 6px;
+  vertical-align: 2px;
+  height: 17px;
+  font-size: 9px;
+}
+
+.left-note {
+  color: #c2353b;
+  font-weight: 700;
 }
 
 .rank-stats {

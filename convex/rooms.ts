@@ -8,6 +8,9 @@ import type { MutationCtx } from './_generated/server';
 import { internalMutation, mutation, query } from './_generated/server';
 import {
   EMPTY_ROOM_TTL_MS,
+  ENDED_DROP_MS,
+  GONE_GRACE_MS,
+  GONE_LEFT_MS,
   HEARTBEAT_STALE_MS,
   LOBBY_DROP_MS,
   SWEEP_EVERY_MS,
@@ -15,6 +18,7 @@ import {
   clampPlayers,
   cleanName,
   closeRoom,
+  deleteSignalsTo,
   fail,
   freeCharacter,
   gameFor,
@@ -206,7 +210,7 @@ export const removeSeat = mutation({
       return;
     }
     const target = (await membersOf(ctx, room.code)).find((m) => m.playerId === id);
-    if (target) await leaveRoom(ctx, target);
+    if (target) await leaveRoom(ctx, target, 'removed');
   },
 });
 
@@ -261,12 +265,22 @@ export const rematch = mutation({
     if (room.status !== 'ended') return;
     const game = await gameFor(ctx, room.code);
     if (game) await ctx.db.delete(game._id);
+    // Only people who are actually here come along to the rematch lobby.
     const members = await membersOf(ctx, room.code);
-    const present = new Set(members.filter((m) => m.connected).map((m) => m.playerId));
-    for (const m of members) if (!m.connected) await ctx.db.delete(m._id);
+    const present = new Set<string>();
+    for (const m of members) {
+      if (m.connected) {
+        present.add(m.playerId);
+        continue;
+      }
+      await ctx.db.delete(m._id);
+      const ping = await presenceOf(ctx, m.playerId);
+      if (ping) await ctx.db.delete(ping._id);
+      await deleteSignalsTo(ctx, m.playerId);
+    }
     const seats = room.seats
-      .filter((s) => s.kind === 'bot' || present.has(s.id))
-      .map((s) => ({ ...s, ready: s.kind === 'bot' || s.id === room.hostId }));
+      .filter((s) => s.kind === 'bot' || (present.has(s.id) && !s.left))
+      .map((s) => ({ ...s, ready: s.kind === 'bot' || s.id === room.hostId, inVoice: s.inVoice && present.has(s.id) }));
     await ctx.db.patch(room._id, { status: 'lobby', seats });
     await system(ctx, room.code, 'Back in the lobby. Rematch?');
   },
@@ -282,7 +296,7 @@ export const heartbeat = mutation({
     if (!m) return;
     const now = Date.now();
     const ping = await presenceOf(ctx, m.playerId);
-    if (ping) await ctx.db.patch(ping._id, { lastSeen: now });
+    if (ping) await ctx.db.patch(ping._id, { lastSeen: now, goneAt: undefined });
     else await ctx.db.insert('presence', { playerId: m.playerId, roomCode: m.roomCode, lastSeen: now });
     if (m.connected) return;
     // Back after a drop-out: restore the seat and take the game back from the bot.
@@ -297,23 +311,63 @@ export const heartbeat = mutation({
   },
 });
 
-/** Runs every few seconds per room: notices players who vanished and cleans up abandoned rooms. */
+/**
+ * The page-close beacon (see http.ts). The player isn't removed yet: if this was a refresh,
+ * the reloaded page heartbeats within a second or two and cancels it.
+ */
+export const bye = internalMutation({
+  args: { secret: v.string() },
+  handler: async (ctx, { secret }) => {
+    const m = await memberBySecret(ctx, secret);
+    if (!m) return;
+    const ping = await presenceOf(ctx, m.playerId);
+    if (ping) await ctx.db.patch(ping._id, { goneAt: Date.now() });
+    await ctx.scheduler.runAfter(GONE_GRACE_MS + 500, internal.rooms.sweep, { code: m.roomCode, once: true });
+  },
+});
+
+/**
+ * Runs every few seconds per room (plus once right after a goodbye beacon):
+ * - closed the tab (beacon, no refresh) → removed from lobbies and finished rooms, marked away in games
+ * - silent for a while → shown as away (a bot plays for them in a game)
+ * - silent for long → removed from lobbies and finished rooms
+ * - nobody left for 10 minutes → the room is deleted
+ */
 export const sweep = internalMutation({
-  args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  args: { code: v.string(), once: v.optional(v.boolean()) },
+  handler: async (ctx, { code, once }) => {
     let room = await roomByCode(ctx, code);
     if (!room) return;
     const now = Date.now();
-    const pings = await ctx.db
-      .query('presence')
-      .withIndex('by_room', (q) => q.eq('roomCode', code))
-      .collect();
-    const lastSeen = new Map(pings.map((p) => [p.playerId, p.lastSeen]));
-    const idle = (playerId: string) => now - (lastSeen.get(playerId) ?? 0);
+    const pings = new Map(
+      (
+        await ctx.db
+          .query('presence')
+          .withIndex('by_room', (q) => q.eq('roomCode', code))
+          .collect()
+      ).map((p) => [p.playerId, p]),
+    );
+    const idle = (playerId: string) => now - (pings.get(playerId)?.lastSeen ?? 0);
+    /** How long ago they closed the page without coming back (null if they didn't). */
+    const goneFor = (playerId: string) => {
+      const p = pings.get(playerId);
+      return p?.goneAt && p.lastSeen <= p.goneAt ? now - p.goneAt : null;
+    };
+    const gone = (playerId: string, after = GONE_GRACE_MS) => (goneFor(playerId) ?? -1) >= after;
     let members = await membersOf(ctx, code);
 
-    if (room.status === 'lobby') {
-      for (const m of members) if (idle(m.playerId) > LOBBY_DROP_MS) await leaveRoom(ctx, m);
+    // Lobbies and finished rooms only hold people who are actually around; in a running game
+    // a closed tab becomes a departed player (the seat stays, a bot finishes it).
+    const limit = room.status === 'lobby' ? LOBBY_DROP_MS : room.status === 'ended' ? ENDED_DROP_MS : Infinity;
+    let dropped = false;
+    for (const m of members) {
+      const closedTab = gone(m.playerId, room.status === 'playing' ? GONE_LEFT_MS : GONE_GRACE_MS);
+      if (closedTab || idle(m.playerId) > limit) {
+        await leaveRoom(ctx, m, closedTab ? 'left' : 'timedOut');
+        dropped = true;
+      }
+    }
+    if (dropped) {
       room = await roomByCode(ctx, code);
       if (!room) return;
       members = await membersOf(ctx, code);
@@ -321,14 +375,14 @@ export const sweep = internalMutation({
 
     let seats = room.seats;
     for (const m of members) {
-      if (m.connected && idle(m.playerId) > HEARTBEAT_STALE_MS) {
+      if (m.connected && (gone(m.playerId) || idle(m.playerId) > HEARTBEAT_STALE_MS)) {
         await ctx.db.patch(m._id, { connected: false });
         seats = seats.map((s) => (s.id === m.playerId ? { ...s, connected: false, inVoice: false, muted: false } : s));
         await setPlayerConnected(ctx, room, m.playerId, false);
       }
     }
 
-    const anyoneHere = members.some((m) => idle(m.playerId) <= HEARTBEAT_STALE_MS);
+    const anyoneHere = members.some((m) => idle(m.playerId) <= HEARTBEAT_STALE_MS && !gone(m.playerId));
     const emptySince = anyoneHere ? null : (room.emptySince ?? now);
     if (emptySince !== null && now - emptySince > EMPTY_ROOM_TTL_MS) {
       await closeRoom(ctx, code);
@@ -337,8 +391,14 @@ export const sweep = internalMutation({
     // Only write when something changed: every write re-sends the room to all players.
     if (seats !== room.seats || emptySince !== room.emptySince) {
       const fresh = await ctx.db.get(room._id);
-      if (fresh) await ctx.db.patch(room._id, { seats, emptySince });
+      if (fresh) {
+        const away = new Set(seats.filter((s) => !s.connected).map((s) => s.id));
+        await ctx.db.patch(room._id, {
+          emptySince,
+          seats: fresh.seats.map((s) => (away.has(s.id) ? { ...s, connected: false, inVoice: false, muted: false } : s)),
+        });
+      }
     }
-    await ctx.scheduler.runAfter(SWEEP_EVERY_MS, internal.rooms.sweep, { code });
+    if (!once) await ctx.scheduler.runAfter(SWEEP_EVERY_MS, internal.rooms.sweep, { code });
   },
 });

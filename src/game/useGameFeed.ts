@@ -163,6 +163,13 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
         case 'auto':
           if (mine(e.player) && e.auto) show({ title: 'Auto-play on', sub: 'A bot is playing for you', tone: 'info' }, 1600);
           break;
+        case 'left':
+          if (!mine(e.player)) {
+            sound.play('noMove');
+            mood(e.player, 'sad', 2400);
+            show({ title: `${name(e.player)} left`, sub: 'A bot will finish their game', tone: 'info', character: char(e.player) }, 1800);
+          }
+          break;
         case 'over': {
           const myWin = state.ranking.length > 0 && mine(state.ranking[0]) && state.players[state.ranking[0]].kind === 'human';
           if (myWin) celebrate(Object.values(CHARACTERS).map((c) => c.color));

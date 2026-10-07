@@ -610,6 +610,7 @@ function PlayerChip({
         active ? 'chip--active' : '',
         player.rank ? 'chip--done' : '',
         !player.connected ? 'chip--away' : '',
+        player.left ? 'chip--left' : '',
         `chip--${where}`,
       ].join(' ')}
       style={{ '--c': meta.color, '--cl': meta.light, '--cd': meta.dark } as CSSProperties}
@@ -639,6 +640,18 @@ function PlayerChip({
         <span className="chip-name">
           <span className="chip-name-text">{player.name}</span>
           {isMe && <span className="tag">YOU</span>}
+          {player.left ? (
+            <span className="tag tag--left" title="Left the game — a bot is finishing for them">
+              LEFT
+            </span>
+          ) : (
+            !player.connected &&
+            player.kind === 'human' && (
+              <span className="tag tag--away" title="Reconnecting — a bot is playing for them">
+                AWAY
+              </span>
+            )
+          )}
           {player.kind === 'bot' && <Bot size={12} className="chip-bot" />}
           {voice?.inVoice && (voice.muted ? <MicOff size={11} className="chip-mic is-muted" /> : <Mic size={11} className="chip-mic" />)}
         </span>

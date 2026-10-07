@@ -49,6 +49,7 @@ export function createGame(cfg: MatchConfig, id: string, now: number): GameState
     rank: 0,
     auto: false,
     connected: true,
+    left: false,
     timeouts: 0,
     stats: { captures: 0, captured: 0, sixes: 0, moves: 0 },
   }));
@@ -111,12 +112,39 @@ export function setConnected(st: GameState, ctx: StepCtx, playerId: string, conn
   const idx = st.players.findIndex((p) => p.id === playerId);
   if (idx < 0) return false;
   const pl = st.players[idx];
-  if (pl.connected === connected && pl.auto === !connected) return false;
+  if (pl.left || (pl.connected === connected && pl.auto === !connected)) return false;
   pl.connected = connected;
   const events: GameEvent[] = [];
   if (pl.kind === 'human' && pl.auto !== !connected) {
     toggleAuto(st, ctx, idx, !connected);
     events.push({ type: 'auto', player: idx, auto: !connected });
+  }
+  emit(st, ctx, events);
+  return true;
+}
+
+/**
+ * A player left the room for good. A bot finishes their pieces, and they stop counting as a
+ * human racer: if only bots and departed players are still racing, the game ends right away.
+ */
+export function markLeft(st: GameState, ctx: StepCtx, playerId: string): boolean {
+  const idx = st.players.findIndex((p) => p.id === playerId);
+  if (idx < 0 || st.players[idx].left) return false;
+  const pl = st.players[idx];
+  pl.left = true;
+  pl.connected = false;
+  const events: GameEvent[] = [{ type: 'left', player: idx }];
+  if (st.phase === 'over') {
+    emit(st, ctx, events);
+    return true;
+  }
+  if (pl.kind === 'human' && !pl.auto) toggleAuto(st, ctx, idx, true);
+  if (checkOver(st, ctx)) {
+    st.phase = 'over';
+    st.pending = null;
+    st.deadline = null;
+    st.movable = [];
+    events.push({ type: 'over', ranking: [...st.ranking] });
   }
   emit(st, ctx, events);
   return true;
@@ -335,10 +363,11 @@ function doMove(st: GameState, ctx: StepCtx, token: number, pre: GameEvent[] = [
 
 /** Assigns the remaining ranks if the game is decided. */
 function checkOver(st: GameState, ctx: StepCtx): boolean {
-  const left = st.players.map((_, i) => i).filter((i) => !st.players[i].rank);
-  const onlyBots = left.every((i) => st.players[i].kind === 'bot');
-  if (left.length > 1 && !(onlyBots && (ctx.endWhenOnlyBots ?? true))) return false;
-  left
+  const racing = st.players.map((_, i) => i).filter((i) => !st.players[i].rank);
+  // Players who left the room count as bots: nobody is waiting on their result.
+  const onlyBots = racing.every((i) => st.players[i].kind === 'bot' || st.players[i].left);
+  if (racing.length > 1 && !(onlyBots && (ctx.endWhenOnlyBots ?? true))) return false;
+  racing
     .sort((a, b) => totalProgress(st, b) - totalProgress(st, a))
     .forEach((i) => {
       st.ranking.push(i);

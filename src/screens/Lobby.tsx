@@ -326,7 +326,9 @@ function SeatTile({
         {seat.inVoice && (seat.muted ? <MicOff size={13} className="chip-mic is-muted" /> : <Mic size={13} className="chip-mic" />)}
         {!seat.connected && <WifiOff size={13} />}
       </span>
-      <span className={`seat-ready ${seat.ready ? 'is-ready' : ''}`}>{seat.ready ? 'Ready' : 'Not ready'}</span>
+      <span className={`seat-ready ${seat.ready ? 'is-ready' : ''} ${seat.connected ? '' : 'is-away'}`}>
+        {!seat.connected ? 'Away…' : seat.ready ? 'Ready' : 'Not ready'}
+      </span>
     </div>
   );
 }

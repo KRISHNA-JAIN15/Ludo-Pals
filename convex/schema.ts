@@ -11,6 +11,8 @@ export const seatValidator = v.object({
   connected: v.boolean(),
   inVoice: v.boolean(),
   muted: v.boolean(),
+  /** Left mid-game: the seat stays in the running game (a bot plays it) but the person is gone. */
+  left: v.optional(v.boolean()),
 });
 
 export default defineSchema({
@@ -52,6 +54,8 @@ export default defineSchema({
     playerId: v.string(),
     roomCode: v.string(),
     lastSeen: v.number(),
+    /** Set by the page-close beacon; cleared by the next heartbeat (e.g. after a refresh). */
+    goneAt: v.optional(v.number()),
   })
     .index('by_player', ['playerId'])
     .index('by_room', ['roomCode']),

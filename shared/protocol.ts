@@ -15,6 +15,8 @@ export interface RoomSeat {
   connected: boolean;
   inVoice: boolean;
   muted: boolean;
+  /** Left mid-game: the seat stays in the running game (a bot plays it) but the person is gone. */
+  left?: boolean;
 }
 
 export interface RoomState {

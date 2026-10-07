@@ -58,6 +58,8 @@ export interface PlayerState {
   /** A bot is playing on this player's behalf (timeout / disconnect). */
   auto: boolean;
   connected: boolean;
+  /** Left the room for good (a bot finishes for them; they no longer hold the game open). */
+  left: boolean;
   timeouts: number;
   stats: PlayerStats;
 }
@@ -97,6 +99,7 @@ export type GameEvent =
     }
   | { type: 'finish'; player: number; rank: number }
   | { type: 'auto'; player: number; auto: boolean }
+  | { type: 'left'; player: number }
   | { type: 'over'; ranking: number[] };
 
 export interface GameState {
