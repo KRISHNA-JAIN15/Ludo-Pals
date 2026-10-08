@@ -219,27 +219,32 @@ const BoardSurface = memo(
     a.arms === b.arms && a.viewDeg === b.viewDeg && a.activeArm === b.activeArm && a.tokens === b.tokens && a.owners.join() === b.owners.join(),
 );
 
+/** Token size in board units (a track square is 1): a touch bigger than a square, like real Ludo pawns. */
+const TOKEN_SIZE = 1.18;
+/** Yards have room to spare, so tokens waiting there are bigger and easier to tap. */
+const YARD_TOKEN_SIZE: Record<number, number> = { 4: 1.5, 6: 1.25 };
+
 function stackOffsets(n: number): { off: Pt[]; scale: number } {
   if (n <= 1) return { off: [[0, 0]], scale: 1 };
   if (n === 2)
     return {
       off: [
-        [-0.2, 0],
-        [0.2, 0],
+        [-0.25, 0],
+        [0.25, 0],
       ],
       scale: 0.78,
     };
   if (n === 3)
     return {
       off: [
-        [-0.2, -0.13],
-        [0.2, -0.13],
-        [0, 0.18],
+        [-0.25, -0.16],
+        [0.25, -0.16],
+        [0, 0.22],
       ],
       scale: 0.7,
     };
   const off: Pt[] = [];
-  for (let i = 0; i < n; i++) off.push([i % 2 ? 0.2 : -0.2, Math.floor(i / 2) % 2 ? 0.2 : -0.2]);
+  for (let i = 0; i < n; i++) off.push([i % 2 ? 0.25 : -0.25, Math.floor(i / 2) % 2 ? 0.25 : -0.25]);
   return { off, scale: 0.64 };
 }
 
@@ -283,8 +288,7 @@ export function Board({ state, viewArm, display, hops, returning, movable, onPic
   const groups = new Map<string, Item[]>();
   for (const it of items) groups.set(it.cell, [...(groups.get(it.cell) ?? []), it]);
 
-  const tokenSize = 0.92;
-  const sizePct = (tokenSize / w) * 100;
+  const pctOf = (units: number) => `${(units / w) * 100}%`;
   const movableSet = new Set(movable);
 
   const targets =
@@ -310,7 +314,7 @@ export function Board({ state, viewArm, display, hops, returning, movable, onPic
         <span
           key={`t${i}`}
           className="target-hint"
-          style={{ ...pct(p), width: `${sizePct * 1.08}%`, '--c': CHARACTERS[active.character].color } as CSSProperties}
+          style={{ ...pct(p), width: pctOf(1), '--c': CHARACTERS[active.character].color } as CSSProperties}
         />
       ))}
 
@@ -328,6 +332,7 @@ export function Board({ state, viewArm, display, hops, returning, movable, onPic
         const top = `${((r[1] + o[1] - by) / h) * 100}%`;
         const canMove = it.pi === state.turn && movableSet.has(it.ti);
         const finished = c.kind === 'finish';
+        const size = c.kind === 'yard' ? (YARD_TOKEN_SIZE[state.arms] ?? TOKEN_SIZE) : TOKEN_SIZE;
         const z = canMove ? 50 : Math.round((r[1] + o[1] - by) * 2) + (finished ? 0 : 10);
         return (
           <button
@@ -340,7 +345,7 @@ export function Board({ state, viewArm, display, hops, returning, movable, onPic
               finished ? 'token--home' : '',
               it.pi === state.turn && state.phase !== 'over' ? 'token--turn' : '',
             ].join(' ')}
-            style={{ left, top, width: `${sizePct}%`, zIndex: z, '--scale': scale * (finished ? 0.8 : 1) } as CSSProperties}
+            style={{ left, top, width: pctOf(size), zIndex: z, '--scale': scale * (finished ? 0.65 : 1) } as CSSProperties}
             onClick={canMove ? () => onPick(it.ti) : undefined}
             tabIndex={canMove ? 0 : -1}
             aria-label={`${pl.name} token ${it.ti + 1}${canMove ? ' — tap to move' : ''}`}

@@ -1574,6 +1574,77 @@
   }
 }
 
+/* phones in portrait: the board is as wide as the screen allows, so let it use (almost) all of it */
+@media (max-width: 699px) {
+  .game {
+    padding-inline: 4px;
+  }
+  .game-head,
+  .seat-row,
+  .side {
+    padding-inline: 6px;
+  }
+}
+
+/* tall phones: the board can't get any wider, so spend the spare height on bigger chips and dice */
+@media (max-width: 699px) and (min-height: 740px) {
+  .board-stack {
+    --rows: 144px;
+  }
+  .seat-row {
+    min-height: 64px;
+  }
+  .seat-row:not(.seat-row--n3) .chip {
+    gap: 9px;
+    padding: 5px 15px 5px 5px;
+  }
+  .seat-row--bottom:not(.seat-row--n3) .chip:last-child,
+  .seat-row--top:not(.seat-row--n3) .chip:last-child {
+    padding: 5px 5px 5px 15px;
+  }
+  .seat-row:not(.seat-row--n3) .chip-avatar,
+  .seat-row:not(.seat-row--n3) .chip-avatar .avatar {
+    width: 50px !important;
+    height: 50px !important;
+  }
+  .seat-row:not(.seat-row--n3) .chip-timer {
+    inset: -8px;
+    width: 66px;
+    height: 66px;
+  }
+  .seat-row:not(.seat-row--n3) .chip-turn-dot {
+    left: 38px;
+  }
+  .seat-row--bottom:not(.seat-row--n3) .chip:last-child .chip-turn-dot,
+  .seat-row--top:not(.seat-row--n3) .chip:last-child .chip-turn-dot {
+    left: auto;
+    right: 38px;
+  }
+  .seat-row:not(.seat-row--n3) .chip-name {
+    font-size: 16px;
+  }
+  .seat-row:not(.seat-row--n3) .chip-tokens i {
+    width: 10px;
+    height: 10px;
+  }
+  .dock-dice .dice {
+    --s: 78px !important;
+  }
+  .dock {
+    min-height: 112px;
+  }
+  .dock-mascot {
+    width: 84px;
+    height: 84px;
+  }
+  .dock-name {
+    font-size: 17px;
+  }
+  .dock-status {
+    font-size: 15px;
+  }
+}
+
 /* narrow phones with six players: compact chips so three fit per row */
 @media (max-width: 400px) {
   .seat-row--n3 .chip {
