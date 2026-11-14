@@ -154,8 +154,7 @@ function PlayTab({ onHelp }: { onHelp: () => void }) {
     <div className="play-tab">
       <div className="title-row">
         <h1 className="title-xl">
-          Pick Game
-          <br />
+          Pick Game <br />
           To Play
         </h1>
         <div className="title-side">
@@ -454,9 +453,9 @@ export function HowToPlay({ open, onClose }: { open: boolean; onClose: () => voi
   const rules: [string, string, string][] = [
     ['🎲', 'Roll a 6 to start', 'Tokens wait in their yard until you roll a 6 (Quick mode: a 1 or a 6).'],
     [
-      '⚖️',
-      'Fair dice',
-      'By default every player rolls each number exactly once in every 6 rolls, so nobody waits forever for a six and luck evens out. Pick "Lucky" dice for pure chance.',
+      '⚡',
+      'Action dice',
+      'The dice read the table: a six shows up fast when you are stuck, chases end in more bonks, and whoever is behind gets a little extra luck. Prefer it plain? Pick "Fair" (everyone rolls each number once in every 6) or "Lucky" (pure chance).',
     ],
     ['🏃', 'Race clockwise', 'Move around the board and up your coloured lane to the centre.'],
     ['💥', 'Bonk!', 'Land on an opponent to send them back to their yard — and earn a bonus roll.'],

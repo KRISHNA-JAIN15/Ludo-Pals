@@ -241,12 +241,54 @@
   animation: rise-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
 }
 
+/* The play tab fits the screen exactly (header above, nav below): the cards take the height that is left,
+   so on a short phone they shrink instead of sliding under the nav. */
+.play-tab {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 188px);
+  min-height: 330px;
+}
+
 .title-row {
   display: flex;
+  flex: none;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+/* landscape phones: no room to fit everything, so the tab scrolls under the nav instead */
+@media (max-height: 520px) {
+  .play-tab {
+    min-height: 400px;
+  }
+}
+
+/* short phones: one line of title and a row of round buttons leave the cards more room */
+@media (max-height: 700px) {
+  .play-tab .title-row {
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .play-tab .title-xl {
+    font-size: clamp(22px, 6.6vw, 30px);
+  }
+  .play-tab .title-xl br {
+    display: none;
+  }
+  .play-tab .title-side {
+    flex-direction: row;
+    gap: 8px;
+  }
+  .play-tab .bubble-title {
+    font-size: clamp(22px, 6.6vw, 28px);
+  }
+  .play-tab .mode-sub {
+    margin-top: 8px;
+    font-size: 14px;
+  }
 }
 
 .title-side {
@@ -257,6 +299,7 @@
 
 .continue-card {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
   margin-bottom: 4px;
@@ -294,8 +337,12 @@
 
 .carousel {
   display: flex;
+  flex: 1;
+  align-items: center;
   gap: 16px;
+  min-height: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   padding: 10px 16px 34px;
   margin: 0 -16px;
@@ -314,8 +361,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  height: clamp(370px, 55dvh, 470px);
-  padding: 24px 16px 0;
+  height: min(100%, 480px);
+  padding: clamp(14px, 3dvh, 24px) 16px 0;
   border-radius: 36px;
   background: var(--card);
   box-shadow: var(--shadow);
@@ -428,6 +475,7 @@
 
 .dots {
   display: flex;
+  flex: none;
   justify-content: center;
   gap: 6px;
   margin-top: 4px;
@@ -1011,6 +1059,98 @@
   margin-top: 16px;
 }
 
+/* An invite link: nothing to do here but watch the room open */
+.invite-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  margin-top: 6px;
+  padding: 22px 18px 20px;
+  border-radius: 36px;
+  background: var(--yellow);
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.invite-pals {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: min(100%, 300px);
+}
+
+.invite-pals .mascot {
+  width: 36%;
+  margin: 0 -3%;
+  animation: bob 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 10px 10px rgba(110, 70, 0, 0.18));
+}
+
+.invite-pals .mascot:nth-child(2) {
+  width: 44%;
+  z-index: 1;
+  animation-delay: 0.3s;
+}
+
+.invite-pals .mascot:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+.invite-label {
+  position: relative;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: rgba(28, 24, 19, 0.6);
+}
+
+.invite-code {
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+
+.invite-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 28px;
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.invite-actions {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 3px solid rgba(28, 24, 19, 0.2);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ================================================================ lobby */
 
 .lobby {
@@ -1090,10 +1230,82 @@
   color: #fff;
 }
 
+.code-copy.is-done {
+  background: var(--teal);
+}
+
 .room-meta {
   font-size: 13px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.75);
+  text-align: center;
+}
+
+.invite-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.invite-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: 46px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform 0.15s var(--ease-pop),
+    background 0.2s;
+}
+
+.invite-btn:active {
+  transform: scale(0.95);
+}
+
+.invite-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.invite-btn--link {
+  flex: 1;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.invite-btn--link.is-done {
+  background: var(--yellow);
+}
+
+.invite-btn--wa {
+  flex: 1;
+  background: #25d366;
+  color: #fff;
+}
+
+.wa-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+
+.wa-icon svg + svg {
+  position: absolute;
+}
+
+.invite-hint {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.6);
   text-align: center;
 }
 
@@ -1158,10 +1370,16 @@
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  overflow: hidden;
+  min-width: 0;
   font-weight: 700;
   font-size: 14.5px;
   white-space: nowrap;
+}
+
+.seat-tile-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .crown {
@@ -1225,9 +1443,25 @@
 }
 
 .seat-empty-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+}
+
+.seat-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.seat-empty-actions .btn {
+  height: 34px;
+  padding: 0 11px;
+  font-size: 13px;
 }
 
 .seat-kick {
@@ -1265,8 +1499,14 @@
   gap: 8px;
 }
 
-.chat-card .chat-list {
-  max-height: 240px;
+.voice-warn {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: #fdecec;
+  color: #a3353a;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 /* ================================================================ results */
@@ -1526,6 +1766,14 @@
   flex: none;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+/* narrow phones: the icons say it, so the words make way for the player's name */
+@media (max-width: 420px) {
+  .rank-word {
+    display: none;
+  }
 }
 
 .earned {
@@ -1565,6 +1813,7 @@
   }
   .mode-card {
     flex-basis: 320px;
+    height: min(100%, 470px);
   }
   .mode-card:first-child,
   .mode-card:last-child {

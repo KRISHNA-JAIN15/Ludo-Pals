@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { setHaptics, sound } from '../audio/sound';
 import { finishAt } from '../../shared/board';
 import type { CharacterId, GameState, MatchConfig } from '../../shared/types';
+import { invitedRoom } from '../net/invite';
 import type { SavedGame } from './localSave';
 
 export type Screen = 'splash' | 'hub' | 'setup' | 'online' | 'lobby' | 'game' | 'results';
@@ -161,12 +162,8 @@ save(initial.profile, initial.settings);
 applySettings(initial.settings);
 
 function initialScreen(): Screen {
-  try {
-    if (new URLSearchParams(location.search).get('room')) return 'online';
-  } catch {
-    /* ignore */
-  }
-  return 'splash';
+  // An invite link (?room=CODE) goes straight to joining that room.
+  return invitedRoom() ? 'online' : 'splash';
 }
 
 let toastId = 0;

@@ -8,6 +8,7 @@
  */
 import { finishAt, globalIndex, isSafe, lastTrack, layoutFor } from './board';
 import { chooseMove } from './bot';
+import { actionDie, luckOf } from './dice';
 import { capturesAt, movableTokens, targetOf, totalProgress } from './engine';
 import { fairDie, hashSeed, mulberry32 } from './random';
 import type { GameEvent, GameState, MatchConfig, PendingKind, PlayerState } from './types';
@@ -61,6 +62,7 @@ export function createGame(cfg: MatchConfig, id: string, now: number): GameState
     left: false,
     timeouts: 0,
     stats: { captures: 0, captured: 0, sixes: 0, moves: 0, rolls: 0 },
+    luck: { dry: 0, sinceSix: 0, hitAt: -1000, hitBy: -1 },
   }));
   return {
     id,
@@ -297,8 +299,11 @@ function doRoll(st: GameState, ctx: Ctx, pre: GameEvent[] = []) {
   const p = st.turn;
   const pl = st.players[p];
   const rolls = pl.stats.rolls ?? 0;
-  const value = st.rules.dice === 'fair' ? fairDie(ctx.seed, p, rolls) : 1 + Math.floor(ctx.rng() * 6);
+  const value =
+    st.rules.dice === 'smart' ? actionDie(st, p, ctx.rng) : st.rules.dice === 'fair' ? fairDie(ctx.seed, p, rolls) : 1 + Math.floor(ctx.rng() * 6);
   pl.stats.rolls = rolls + 1;
+  const luck = luckOf(pl);
+  luck.sinceSix = value === 6 ? 0 : luck.sinceSix + 1;
   st.sixStreak = value === 6 ? st.sixStreak + 1 : 0;
   if (value === 6) st.players[p].stats.sixes++;
   st.dice = value;
@@ -315,12 +320,14 @@ function afterRoll(st: GameState, ctx: StepCtx) {
   const value = st.dice!;
   if (value === 6 && st.rules.threeSixes && st.sixStreak >= 3) {
     st.sixStreak = 0;
+    luckOf(st.players[p]).dry++; // nothing moved
     emit(st, ctx, [{ type: 'threeSixes', player: p }]);
     pend(st, ctx, 'nextTurn', ms(st, TIMING.noMove));
     return;
   }
   const movable = movableTokens(st, p, value);
   if (!movable.length) {
+    luckOf(st.players[p]).dry++;
     emit(st, ctx, [{ type: 'noMove', player: p, value }]);
     pend(st, ctx, value === 6 && st.rules.extraOnSix ? 'bonusTurn' : 'nextTurn', ms(st, TIMING.noMove));
     return;
@@ -341,18 +348,26 @@ function doMove(st: GameState, ctx: StepCtx, token: number, pre: GameEvent[] = [
   if (to === null) return;
 
   const captures = capturesAt(st, p, to);
+  const luck = luckOf(pl);
+  // Payback: hitting whoever last sent one of our tokens home (while it still stings).
+  const revenge = captures.some((c) => c.player === luck.hitBy) && st.rollCount - luck.hitAt <= 6 * st.players.length;
   pl.tokens[token] = to;
   pl.stats.moves++;
+  luck.dry = 0;
   for (const c of captures) {
-    st.players[c.player].tokens[c.token] = -1;
-    st.players[c.player].stats.captured++;
+    const victim = st.players[c.player];
+    victim.tokens[c.token] = -1;
+    victim.stats.captured++;
+    Object.assign(luckOf(victim), { hitAt: st.rollCount, hitBy: p });
   }
   pl.stats.captures += captures.length;
+  if (revenge) luck.hitBy = -1; // the score is settled
 
   const fin = finishAt(st.arms);
   const home = to === fin;
   const safe = to <= lastTrack(st.arms) && isSafe(st.arms, globalIndex(st.arms, pl.arm, to));
   const moveEvent: Extract<GameEvent, { type: 'move' }> = { type: 'move', player: p, token, from, to, captures, home, safe, extra: false };
+  if (revenge) moveEvent.revenge = true;
   const events: GameEvent[] = [...pre, moveEvent];
 
   let finished = false;

@@ -2,8 +2,11 @@ export type CharacterId = 'cherry' | 'sunny' | 'splash' | 'mossy' | 'boo' | 'bla
 export type BotLevel = 'easy' | 'normal' | 'hard';
 export type SeatKind = 'human' | 'bot';
 export type ModeId = 'classic' | 'quick';
-/** fair: balanced, seeded dice (each face once every six rolls); classic: independent random rolls. */
-export type DiceMode = 'fair' | 'classic';
+/**
+ * smart: "Action" dice weighted by what is happening on the board (see shared/dice.ts);
+ * fair: balanced, seeded dice (each face once every six rolls); classic: independent random rolls.
+ */
+export type DiceMode = 'smart' | 'fair' | 'classic';
 export type Mood = 'idle' | 'happy' | 'sad' | 'shock' | 'smug' | 'think';
 
 export interface Rules {
@@ -48,6 +51,18 @@ export interface PlayerStats {
   rolls: number;
 }
 
+/** What the Action dice remember about a player's recent luck. */
+export interface Luck {
+  /** Rolls in a row that left this player with nothing to move. */
+  dry: number;
+  /** Rolls since this player's last six. */
+  sinceSix: number;
+  /** `rollCount` when one of their tokens was last sent home (-1000 = never). */
+  hitAt: number;
+  /** Who sent it home (player index, -1 = nobody). */
+  hitBy: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -67,6 +82,8 @@ export interface PlayerState {
   left: boolean;
   timeouts: number;
   stats: PlayerStats;
+  /** Missing on games saved before Action dice existed (read it through `luckOf`). */
+  luck?: Luck;
 }
 
 export type Phase = 'roll' | 'rolling' | 'move' | 'moving' | 'over';
@@ -101,6 +118,8 @@ export type GameEvent =
       home: boolean;
       safe: boolean;
       extra: boolean;
+      /** The mover just sent home a token of the player who last sent one of theirs home. */
+      revenge?: boolean;
     }
   | { type: 'finish'; player: number; rank: number }
   | { type: 'auto'; player: number; auto: boolean }

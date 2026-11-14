@@ -305,6 +305,25 @@ code {
   display: inline-flex;
 }
 
+/* "this is the next thing to press": a soft ring breathing out of the button */
+.btn--pulse:not(:disabled)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 0 currentColor;
+  color: rgba(28, 24, 19, 0.35);
+  pointer-events: none;
+  animation: btn-pulse 1.8s ease-out infinite;
+}
+
+@keyframes btn-pulse {
+  70%,
+  100% {
+    box-shadow: 0 0 0 14px rgba(28, 24, 19, 0);
+  }
+}
+
 .icon-btn {
   position: relative;
   display: inline-grid;
@@ -679,11 +698,51 @@ code {
   }
 }
 
+/* three dots taking turns: waiting on someone */
+.dots3 {
+  display: inline-flex;
+  gap: 2.5px;
+}
+
+.dots3 b {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dot-hop 1.2s ease-in-out infinite;
+}
+
+.dots3 b:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dots3 b:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-hop {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
 /* ---------------------------------------------------------------- sheet */
 
+/* Sized to the visible part of the screen (--vvh / --vvt, see main.tsx), so a sheet with a text
+   field stays above the on-screen keyboard. */
 .sheet-wrap {
   position: fixed;
-  inset: 0;
+  top: var(--vvt, 0px);
+  left: 0;
+  right: 0;
+  height: var(--vvh, 100dvh);
   z-index: 300;
   display: flex;
   align-items: flex-end;
@@ -703,7 +762,7 @@ code {
   position: relative;
   width: 100%;
   max-width: 520px;
-  max-height: min(88dvh, 760px);
+  max-height: min(88%, 760px);
   overflow-y: auto;
   background: var(--cream);
   border-radius: 30px 30px 0 0;
@@ -836,6 +895,21 @@ code {
     opacity: 0;
     transform: translateY(14px);
   }
+}
+
+.crash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.crash-face {
+  font-size: 64px;
+  line-height: 1;
+  animation: bob 2.2s ease-in-out infinite;
 }
 
 .loader {

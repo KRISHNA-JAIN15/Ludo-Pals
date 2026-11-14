@@ -52,4 +52,16 @@ export type VoiceSignal =
   | { kind: 'ice'; cid: string; candidate: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null } };
 
 export const EMOTES = ['😂', '😡', '😭', '🔥', '👏', '😎', '🤯', '🙏', '💀', '❤️'];
-export const QUICK_CHAT = ['Nice move!', 'Hurry up! ⏱️', 'Oops 😅', 'Good game!', 'Not again 😩', 'Revenge time 😈', 'Lucky roll!', 'Well played 👏'];
+export const QUICK_CHAT = [
+  'Nice move!',
+  'Hurry up! ⏱️',
+  'Oops 😅',
+  'Need a six 🎲',
+  'Not again 😩',
+  'Revenge time 😈',
+  'Lucky roll! 🍀',
+  "Don't bonk me 🙏",
+  'Well played 👏',
+  'Good game!',
+  'One more?',
+];

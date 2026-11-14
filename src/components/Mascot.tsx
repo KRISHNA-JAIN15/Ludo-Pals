@@ -216,8 +216,10 @@ export function Mascot({
   const shape = SHAPES[id];
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const [fx, fy] = shape.face;
+  // Avatars zoom into the face: the pal's colour fills the whole frame, so no body edge or stem shows up as a stray cut.
+  const face = crop === 'face';
   const blushColor = id === 'cherry' ? '#FFC2CF' : '#FF8FB0';
-  const viewBox = crop === 'face' ? `${fx - 47} ${fy - 50} 94 94` : limbs ? '-12 -6 144 146' : outline ? '6 -2 108 124' : '0 0 120 120';
+  const viewBox = face ? `${fx - 47} ${fy - 50} 94 94` : limbs ? '-12 -6 144 146' : outline ? '6 -2 108 124' : '0 0 120 120';
   const outlineProps: ShapeProps = { fill: INK, stroke: INK, strokeWidth: 9, strokeLinejoin: 'round' };
 
   return (
@@ -262,12 +264,18 @@ export function Mascot({
         </g>
       )}
 
-      {shape.back?.({ color: meta.color, dark: meta.dark }, outline)}
-      {outline && shape.body(outlineProps)}
-      {shape.body({ fill: meta.color })}
+      {face ? (
+        <rect x={fx - 70} y={fy - 73} width={140} height={140} fill={meta.color} />
+      ) : (
+        <>
+          {shape.back?.({ color: meta.color, dark: meta.dark }, outline)}
+          {outline && shape.body(outlineProps)}
+          {shape.body({ fill: meta.color })}
+        </>
+      )}
 
       {!lite && (
-        <g clipPath={`url(#clip-${uid})`}>
+        <g clipPath={face ? undefined : `url(#clip-${uid})`}>
           <ellipse cx={fx + 48} cy={fy + 4} rx={36} ry={80} fill={meta.dark} opacity={0.22} />
           <ellipse cx={38} cy={fy - 30} rx={12} ry={7} fill="#fff" opacity={0.28} transform={`rotate(-30 38 ${fy - 30})`} />
         </g>

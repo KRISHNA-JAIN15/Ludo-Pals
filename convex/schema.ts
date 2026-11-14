@@ -24,7 +24,7 @@ export default defineSchema({
     mode: v.string(),
     turnSeconds: v.number(),
     botLevel: v.string(),
-    /** 'fair' (default) or 'classic' dice — see shared/random.ts. */
+    /** 'smart' (Action, the default), 'fair' or 'classic' dice: see shared/dice.ts and shared/random.ts. */
     dice: v.optional(v.string()),
     status: v.union(v.literal('lobby'), v.literal('playing'), v.literal('ended')),
     seats: v.array(seatValidator),

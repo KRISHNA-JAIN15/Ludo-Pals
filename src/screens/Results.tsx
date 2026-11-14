@@ -68,6 +68,12 @@ export function Results() {
   const bonkKing = most('captures');
   // With fair dice everyone rolls the same numbers, so "luckiest" means nothing.
   const lucky = state.rules.dice === 'fair' ? undefined : most('sixes');
+  const diceNote =
+    state.rules.dice === 'fair'
+      ? '🎲 Fair dice: equal luck for everyone'
+      : state.rules.dice === 'smart'
+        ? '🎲 Action dice: quick sixes, more bonks'
+        : null;
   const stickers = (p: PlayerState) => {
     const out: string[] = [];
     if (p.rank === 1) out.push('WINNER');
@@ -88,7 +94,7 @@ export function Results() {
         <span className="results-kicker">GAME OVER</span>
         <h1 className="title-xl">{headline}</h1>
         <p className="muted">{sub}</p>
-        {state.rules.dice === 'fair' && <p className="fair-note">🎲 Fair dice: equal luck for everyone</p>}
+        {diceNote && <p className="fair-note">{diceNote}</p>}
       </header>
 
       <section className={`podium podium--${podium.length}`}>
@@ -142,7 +148,9 @@ export function Results() {
               </b>
             </div>
             <span className="rank-stats">
-              💥 {p.stats.captures} {p.stats.captures === 1 ? 'bonk' : 'bonks'} · 🎲 {p.stats.sixes} {p.stats.sixes === 1 ? 'six' : 'sixes'}
+              💥 {p.stats.captures}
+              <span className="rank-word"> {p.stats.captures === 1 ? 'bonk' : 'bonks'}</span> · 🎲 {p.stats.sixes}
+              <span className="rank-word"> {p.stats.sixes === 1 ? 'six' : 'sixes'}</span>
             </span>
           </div>
         ))}

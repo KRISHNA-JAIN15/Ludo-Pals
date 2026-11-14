@@ -10,6 +10,7 @@ import {
   MicOff,
   Music,
   Pause,
+  Phone,
   Play,
   RotateCcw,
   Smile,
@@ -19,17 +20,18 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { finishAt, geom } from '../../shared/board';
-import { CHARACTERS, MODES } from '../../shared/characters';
-import { Match } from '../../shared/match';
+import { CHARACTERS, MODES, diceInfo } from '../../shared/characters';
+import { Match, TIMING } from '../../shared/match';
 import { EMOTES } from '../../shared/protocol';
 import { botReactions } from '../../shared/reactions';
 import type { GameState, MatchConfig, PlayerState } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Board, yardScreenPositions } from '../components/Board';
 import { ChatPanel } from '../components/ChatPanel';
+import { jumboEmoji, previewOf } from '../components/chatKit';
 import { Dice } from '../components/Dice';
 import { Mascot, type Mood } from '../components/Mascot';
-import { Avatar, Btn, IconBtn, Sheet, Toggle, VoiceMic } from '../components/ui';
+import { Avatar, Btn, DiceGlyph, IconBtn, Sheet, Toggle, VoiceMic } from '../components/ui';
 import type { LinkState } from '../net/voice';
 import { useBoardAnimation } from '../game/useBoardAnimation';
 import { ordinal, useGameFeed, type Banner } from '../game/useGameFeed';
@@ -233,6 +235,8 @@ function GameView({ ctl }: { ctl: GameCtl }) {
   const speaking = useOnline((s) => s.speaking);
   const voiceLinks = useOnline((s) => s.voiceLinks);
   const myId = useOnline((s) => s.myId);
+  const bubbles = useOnline((s) => s.bubbles);
+  const micBlocked = useOnline((s) => s.micBlocked);
   const [pending, setPending] = useState(false);
   const [tray, setTray] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -332,7 +336,7 @@ function GameView({ ctl }: { ctl: GameCtl }) {
   const speed = state.speed;
   const status = statusLine(state, cur, myTurn, ctl, feed.quip, movable.length);
   const meAuto = state.phase !== 'over' && state.players.some((p, i) => ctl.controls(i) && p.kind === 'human' && p.auto);
-  const modeLabel = `${MODES[state.rules.mode].label} · ${state.players.length}P · ${state.rules.dice === 'fair' ? 'Fair' : 'Lucky'} dice`;
+  const modeLabel = `${MODES[state.rules.mode].label} · ${state.players.length}P · ${diceInfo(state.rules.dice).label} dice`;
   const seatOf = (id: string) => room?.seats.find((s) => s.id === id);
 
   const renderRow = (row: typeof rows.top, where: 'top' | 'bottom') => (
@@ -354,6 +358,7 @@ function GameView({ ctl }: { ctl: GameCtl }) {
             speaking={!!speaking[pl.id]}
             voice={seat ? { inVoice: seat.inVoice, muted: seat.muted, link: voiceOn && seat.id !== myId ? voiceLinks[seat.id] : undefined } : null}
             emotes={ctl.emotes.filter((e) => e.from === pl.id)}
+            say={ctl.online && !chatOpen ? bubbles[pl.id] : undefined}
             where={where}
           />
         );
@@ -402,7 +407,7 @@ function GameView({ ctl }: { ctl: GameCtl }) {
           {ctl.online && (
             <>
               <IconBtn icon={<MessageCircle size={18} />} label="Chat" badge={unread || null} onClick={() => setChatOpen(true)} />
-              <VoiceButton voiceOn={voiceOn} busy={voiceBusy} muted={muted} />
+              <VoiceButton voiceOn={voiceOn} busy={voiceBusy} muted={muted} blocked={micBlocked} />
             </>
           )}
         </div>
@@ -453,7 +458,20 @@ function GameView({ ctl }: { ctl: GameCtl }) {
               {cur.kind === 'bot' && <span className="tag tag--bot">BOT</span>}
               {cur.auto && <span className="tag tag--bot">AUTO</span>}
             </span>
-            <span className="dock-status">{status}</span>
+            <span className="dock-status">
+              {status.endsWith('…') ? (
+                <>
+                  {status.slice(0, -1)}
+                  <i className="dots3" aria-hidden>
+                    <b />
+                    <b />
+                    <b />
+                  </i>
+                </>
+              ) : (
+                status
+              )}
+            </span>
           </div>
           <div className="dock-dice">
             <Dice
@@ -542,8 +560,24 @@ function GameView({ ctl }: { ctl: GameCtl }) {
       </Sheet>
 
       {ctl.online && (
-        <Sheet open={chatOpen} onClose={() => setChatOpen(false)} title="Room chat">
-          <ChatPanel />
+        <Sheet
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          className="sheet--chat"
+          title={
+            <span className="chat-who">
+              Chat
+              <span className="chat-who-pals">
+                {(room?.seats ?? [])
+                  .filter((s) => s.kind === 'human' && !s.left)
+                  .map((s) => (
+                    <Avatar key={s.id} id={s.character} size={26} />
+                  ))}
+              </span>
+            </span>
+          }
+        >
+          <ChatPanel fill />
           {voiceOn && (
             <div className="voice-row">
               <Btn
@@ -578,28 +612,32 @@ function statusLine(state: GameState, cur: PlayerState, myTurn: boolean, ctl: Ga
   if (!cur.connected) return 'Reconnecting…';
   if (state.phase === 'move') return 'Choosing a move…';
   if (state.phase === 'rolling') return 'Rolling…';
+  if (state.phase === 'moving') return 'On the move…';
   return 'Getting ready to roll…';
 }
 
-function VoiceButton({ voiceOn, busy, muted }: { voiceOn: boolean; busy: boolean; muted: boolean }) {
+function VoiceButton({ voiceOn, busy, muted, blocked }: { voiceOn: boolean; busy: boolean; muted: boolean; blocked: boolean }) {
   const o = useOnline.getState();
   if (!voiceOn) {
+    // A phone, not a struck-out mic: that would read as "you are muted" rather than "not in the call".
     return (
       <IconBtn
-        icon={<MicOff size={18} />}
+        icon={<Phone size={18} />}
         label={busy ? 'Joining voice…' : 'Join voice chat'}
         onClick={() => void o.joinVoice()}
-        className="voice-off"
+        className={busy ? 'voice-off is-busy' : 'voice-off'}
       />
     );
   }
+  // Not muted, yet nobody can hear us: another app has the microphone.
+  const silent = blocked && !muted;
   return (
     <IconBtn
-      icon={muted ? <MicOff size={18} /> : <Mic size={18} />}
-      label={muted ? 'Unmute mic' : 'Mute mic'}
+      icon={muted || silent ? <MicOff size={18} /> : <Mic size={18} />}
+      label={silent ? 'Your mic is not picking anything up (is another app using it?). Tap to mute.' : muted ? 'Unmute mic' : 'Mute mic'}
       onClick={() => o.toggleMute()}
-      variant={muted ? 'white' : 'teal'}
-      className="voice-on"
+      variant={muted || silent ? 'white' : 'teal'}
+      className={silent ? 'voice-on is-blocked' : 'voice-on'}
     />
   );
 }
@@ -615,6 +653,7 @@ function PlayerChip({
   speaking,
   voice,
   emotes,
+  say,
   where,
 }: {
   player: PlayerState;
@@ -627,6 +666,8 @@ function PlayerChip({
   speaking: boolean;
   voice: { inVoice: boolean; muted: boolean; link?: LinkState } | null;
   emotes: FloatingEmote[];
+  /** What they just said in chat, shown as a speech bubble for a few seconds. */
+  say?: { id: string; text: string };
   where: 'top' | 'bottom';
 }) {
   const meta = CHARACTERS[player.character];
@@ -702,7 +743,22 @@ function PlayerChip({
           </span>
         ))}
       </div>
+      {say && (
+        <span key={say.id} className={jumboEmoji(say.text) ? 'chip-say is-jumbo' : 'chip-say'}>
+          {previewOf(say.text)}
+        </span>
+      )}
       {index === state.turn && active && <span className="chip-turn-dot" />}
+      {index === state.turn && active && state.dice && state.phase !== 'roll' && (
+        <span
+          key={state.rollCount}
+          className={state.dice === 6 ? 'chip-roll is-six' : 'chip-roll'}
+          style={{ '--land': `${Math.round(TIMING.roll * state.speed * 0.72)}ms` } as CSSProperties}
+          aria-label={`Rolled ${state.dice}`}
+        >
+          <DiceGlyph pips={state.dice} size={20} />
+        </span>
+      )}
     </div>
   );
 }

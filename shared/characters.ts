@@ -102,7 +102,7 @@ export interface ModeMeta {
 }
 
 const base = {
-  dice: 'fair' as DiceMode,
+  dice: 'smart' as DiceMode,
   extraOnSix: true,
   extraOnCapture: true,
   extraOnHome: true,
@@ -132,7 +132,20 @@ export function pickBotName(taken: string[], seed = Math.random()): string {
   return pool[Math.floor(seed * pool.length) % pool.length];
 }
 
+/** The dice a new game starts with. */
+export const DEFAULT_DICE: DiceMode = 'smart';
+/** In the order the pickers show them. */
+export const DICE_ORDER: DiceMode[] = ['smart', 'fair', 'classic'];
+
 export const DICE_MODES: Record<DiceMode, { label: string; blurb: string }> = {
+  smart: {
+    label: 'Action',
+    blurb: 'Dice that read the table: sixes show up when you are stuck, more chases end in a bonk, and comebacks stay alive.',
+  },
   fair: { label: 'Fair', blurb: 'Balanced dice: every player rolls each number once in every 6 rolls. Skill decides.' },
   classic: { label: 'Lucky', blurb: 'Old-school random dice. Anything can happen.' },
 };
+
+export const isDiceMode = (d: unknown): d is DiceMode => typeof d === 'string' && Object.hasOwn(DICE_MODES, d);
+/** Label and blurb for a kind of dice (never fails, even for a kind this build doesn't know). */
+export const diceInfo = (d: unknown) => DICE_MODES[isDiceMode(d) ? d : 'fair'];

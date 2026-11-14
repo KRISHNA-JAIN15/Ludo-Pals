@@ -155,12 +155,14 @@ export function Sheet({
   title,
   children,
   wide,
+  className,
 }: {
   open: boolean;
   onClose: () => void;
   title?: ReactNode;
   children: ReactNode;
   wide?: boolean;
+  className?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -172,7 +174,7 @@ export function Sheet({
   return (
     <div className="sheet-wrap" role="dialog" aria-modal="true">
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className={`sheet ${wide ? 'sheet--wide' : ''}`}>
+      <div className={['sheet', wide ? 'sheet--wide' : '', className].filter(Boolean).join(' ')}>
         <div className="sheet-grip" />
         {title && (
           <div className="sheet-head">

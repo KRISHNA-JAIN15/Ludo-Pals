@@ -3,11 +3,12 @@ import { MODES } from '../shared/characters';
 import { MIN_PLAYERS, ROOM_CODE_LENGTH, TURN_OPTIONS } from '../shared/protocol';
 import { newSeed } from '../shared/random';
 import { createGame, startGame } from '../shared/rules';
-import type { BotLevel, CharacterId } from '../shared/types';
+import type { BotLevel, CharacterId, GameState } from '../shared/types';
 import { internal } from './_generated/api';
 import type { MutationCtx } from './_generated/server';
 import { internalMutation, mutation, query } from './_generated/server';
 import {
+  DEFAULT_DICE,
   EMPTY_ROOM_TTL_MS,
   AWAY_LEFT_MS,
   ENDED_DROP_MS,
@@ -21,6 +22,7 @@ import {
   cleanName,
   closeRoom,
   deleteSignalsTo,
+  diceOf,
   fail,
   freeCharacter,
   gameFor,
@@ -45,6 +47,8 @@ import {
 } from './lib';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+/** A game step this far overdue is fired by the room sweep. */
+const STALLED_GAME_MS = 5_000;
 
 async function newCode(ctx: MutationCtx) {
   for (;;) {
@@ -71,10 +75,14 @@ export const me = query({
 });
 
 export const get = query({
-  args: { code: v.string() },
-  handler: async (ctx, { code }) => {
+  // `v`: what the calling app understands. Tabs still running a build from before Action dice send
+  // none, and would break on a dice name they don't know, so they are told "fair".
+  args: { code: v.string(), v: v.optional(v.number()) },
+  handler: async (ctx, { code, v: version }) => {
     const room = await roomByCode(ctx, code);
-    return room ? toRoomState(room) : null;
+    if (!room) return null;
+    const state = toRoomState(room);
+    return version === undefined && state.dice === 'smart' ? { ...state, dice: 'fair' as const } : state;
   },
 });
 
@@ -104,7 +112,7 @@ export const create = mutation({
       mode: a.mode,
       turnSeconds: TURN_OPTIONS.includes(a.turnSeconds) ? a.turnSeconds : 20,
       botLevel: 'normal',
-      dice: isDice(a.dice) ? a.dice : 'fair',
+      dice: isDice(a.dice) ? a.dice : DEFAULT_DICE,
       status: 'lobby',
       seats: [humanSeat(playerId, name, a.character, true)],
       emptySince: null,
@@ -253,7 +261,7 @@ export const start = mutation({
           kind: s.kind,
           botLevel: (s.botLevel ?? room.botLevel) as BotLevel,
         })),
-        rules: { ...MODES[room.mode as 'classic' | 'quick'].rules, turnSeconds: room.turnSeconds, dice: isDice(room.dice) ? room.dice : 'fair' },
+        rules: { ...MODES[isMode(room.mode) ? room.mode : 'classic'].rules, turnSeconds: room.turnSeconds, dice: diceOf(room) },
       },
       newId(10),
       ctxStep.now,
@@ -425,6 +433,15 @@ export const sweep = internalMutation({
       await closeRoom(ctx, code);
       return;
     }
+    // Safety net: a game whose next step is overdue (its scheduled step got lost) is nudged along.
+    if (room.status === 'playing') {
+      const game = await gameFor(ctx, code);
+      const pending = (game?.state as GameState | undefined)?.pending;
+      if (game && pending && pending.at < now - STALLED_GAME_MS) {
+        await ctx.scheduler.runAfter(0, internal.game.advance, { gameId: game._id, seq: (game.state as GameState).seq });
+      }
+    }
+
     // Only write when something changed: every write re-sends the room to all players.
     const fresh = await ctx.db.get(room._id);
     if (fresh) {

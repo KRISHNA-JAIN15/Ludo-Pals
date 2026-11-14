@@ -1,33 +1,30 @@
 import { ArrowLeft, LogIn, Plus, Wifi, WifiOff } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { CHARACTERS, CHARACTER_ORDER, DICE_MODES } from '../../shared/characters';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { CHARACTERS, CHARACTER_ORDER, DEFAULT_DICE, DICE_MODES, DICE_ORDER } from '../../shared/characters';
 import { ROOM_CODE_LENGTH } from '../../shared/protocol';
 import type { DiceMode, ModeId } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Mascot } from '../components/Mascot';
 import { Avatar, Btn, Coin, IconBtn, Segmented, Topo } from '../components/ui';
+import { clearInvite, invitedRoom } from '../net/invite';
 import { useOnline } from '../net/online';
 import { HOST_FEE, useApp } from '../store/app';
-
-function urlRoom(): string {
-  try {
-    return (new URLSearchParams(location.search).get('room') ?? '').toUpperCase().slice(0, ROOM_CODE_LENGTH);
-  } catch {
-    return '';
-  }
-}
 
 export function Online() {
   const go = useApp((s) => s.go);
   const profile = useApp((s) => s.profile);
   const updateProfile = useApp((s) => s.updateProfile);
   const status = useOnline((s) => s.status);
-  const { connect, create, join } = useOnline.getState();
+  const joinError = useOnline((s) => s.joinError);
+  const { connect, create, join, resume } = useOnline.getState();
+  /** The room an invite link points at: this screen then only shows that join. */
+  const [invite, setInvite] = useState(invitedRoom);
+  const [inviteFailed, setInviteFailed] = useState(false);
   const [maxPlayers, setMax] = useState(4);
   const [mode, setMode] = useState<ModeId>('classic');
   const [timer, setTimer] = useState(20);
-  const [dice, setDice] = useState<DiceMode>('fair');
-  const [code, setCode] = useState(urlRoom);
+  const [dice, setDice] = useState<DiceMode>(DEFAULT_DICE);
+  const [code, setCode] = useState(invitedRoom);
   const [name, setName] = useState(profile.name);
   const typing = useRef(false);
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
@@ -50,25 +47,31 @@ export function Online() {
     if (n !== profile.name) updateProfile({ name: n });
   };
 
-  const doJoin = async (c = code) => {
-    if (c.length !== ROOM_CODE_LENGTH || busy) return;
+  const doJoin = async (c = code, quiet = false): Promise<boolean> => {
+    if (c.length !== ROOM_CODE_LENGTH || busy) return false;
     saveName();
     sound.unlock();
     setBusy('join');
-    const ok = await join(c);
+    const ok = await join(c, quiet);
     setBusy(null);
-    if (ok) history.replaceState(null, '', location.pathname);
+    if (ok) clearInvite();
+    return ok;
   };
 
   // Invite links (?room=CODE) join automatically once connected.
   useEffect(() => {
-    if (autoJoined.current || status !== 'online') return;
-    const c = urlRoom();
-    if (c.length === ROOM_CODE_LENGTH) {
-      autoJoined.current = true;
-      void doJoin(c);
-    }
+    if (!invite || autoJoined.current || status !== 'online') return;
+    autoJoined.current = true;
+    void doJoin(invite, true).then((ok) => !ok && setInviteFailed(true));
   });
+
+  /** Give up on the invite: back to the normal screen (or to the room this player is still in). */
+  const dismissInvite = () => {
+    clearInvite();
+    setInvite('');
+    setInviteFailed(false);
+    resume();
+  };
 
   const doCreate = async () => {
     if (busy) return;
@@ -84,6 +87,80 @@ export function Online() {
     updateProfile({ character: CHARACTER_ORDER[(i + 1) % CHARACTER_ORDER.length] });
     sound.play('pop');
   };
+
+  if (invite) {
+    const down = status === 'offline' || status === 'unconfigured';
+    return (
+      <div className="screen online invite">
+        <header className="screen-head">
+          <IconBtn icon={<ArrowLeft size={20} />} label="Back" onClick={dismissInvite} />
+          <h1 className="title-md">You&apos;re invited!</h1>
+          <span className="head-spacer" />
+        </header>
+        <div className="invite-card">
+          <Topo className="topo--light" />
+          <div className="invite-pals">
+            {(['mossy', 'cherry', 'sunny'] as const).map((id, i) => (
+              <Mascot key={id} id={id} limbs size="100%" mood={inviteFailed ? 'sad' : i === 1 ? 'joy' : 'happy'} wave={i === 1 && !inviteFailed} />
+            ))}
+          </div>
+          <span className="invite-label">ROOM</span>
+          <div className="invite-code">
+            {invite.split('').map((ch, i) => (
+              <span key={i} className="code-tile" style={{ '--i': i } as CSSProperties}>
+                {ch}
+              </span>
+            ))}
+          </div>
+          {inviteFailed ? (
+            <>
+              <p className="invite-status">{joinError ?? "Couldn't join that room."}</p>
+              <div className="invite-actions">
+                <Btn
+                  variant="black"
+                  full
+                  onClick={() => {
+                    autoJoined.current = false;
+                    setInviteFailed(false);
+                  }}
+                >
+                  Try again
+                </Btn>
+                <Btn variant="white" full onClick={dismissInvite}>
+                  Create or join another room
+                </Btn>
+              </div>
+            </>
+          ) : down ? (
+            <>
+              <p className="invite-status">
+                {status === 'unconfigured'
+                  ? "Online play isn't set up for this build."
+                  : "Can't reach the game server. Check your internet connection."}
+              </p>
+              <div className="invite-actions">
+                <Btn
+                  variant="white"
+                  full
+                  onClick={() => {
+                    dismissInvite();
+                    go('hub');
+                  }}
+                >
+                  Play offline instead
+                </Btn>
+              </div>
+            </>
+          ) : (
+            <p className="invite-status is-busy">
+              <i className="spinner" aria-hidden />
+              {status === 'online' ? `Joining as ${profile.name}…` : 'Connecting…'}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen online">
@@ -206,11 +283,7 @@ export function Online() {
         </div>
         <div className="field">
           <span className="field-label">Dice</span>
-          <Segmented
-            value={dice}
-            onChange={setDice}
-            options={(['fair', 'classic'] as const).map((d) => ({ value: d, label: DICE_MODES[d].label }))}
-          />
+          <Segmented value={dice} onChange={setDice} options={DICE_ORDER.map((d) => ({ value: d, label: DICE_MODES[d].label }))} />
           <span className="hint">{DICE_MODES[dice].blurb}</span>
         </div>
         <div className="field">

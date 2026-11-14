@@ -5,17 +5,37 @@ A cute, chaotic, phone-first Ludo for 2–6 players: six mascot characters, bots
 ## Features
 
 - **2–6 players.** 2–4 players use the classic cross board; 5–6 players get a six-armed hex board.
-- **Fair, deterministic dice.** By default every player rolls from their own shuffled "bag": each number 1–6 comes up exactly once in every six rolls, so nobody waits 20 turns for a six and luck evens out, like the balanced dice of online Ludo apps. Every game has a seed: dice, bot choices and who goes first all derive from it, so a game replays identically from its seed. Pick **Lucky** dice for classic pure chance.
+- **Action dice.** By default the dice read the table, the way popular Ludo apps keep a match lively: a six shows up within a couple of turns when you're stuck in the yard, chases end in a bonk more often, whoever is behind gets a little extra luck, and nobody is hit twice in a row. See [Dice](#dice). Prefer it plain? Pick **Fair** dice (each number exactly once in every six rolls) or **Lucky** dice (pure chance). Every game has a seed: dice, bot choices and who goes first all derive from it, so a game replays identically from its seed.
 - **Bots.** Pick how many humans are playing and bots fill the table up to 4 (adjustable, up to 6). Three skill levels: Chill, Normal, Savage. Normal and Savage play deterministically (same position and roll, same move).
 - **Pass & play.** Several humans can share one device; humans are seated apart and the game announces whose turn it is. Local games save automatically, so a refresh or a closed tab can be picked up again with "Continue your game".
-- **Online rooms.** Create a room, share the 5-letter code or invite link, add bots to empty seats, ready up, play. Turn timers keep things moving, and a rematch only includes people who are actually there. See [Leaving and coming back](#leaving-and-coming-back).
-- **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars. Dropped links reconnect by themselves, and a TURN relay covers strict networks (see [Voice relay](#voice-relay-turn-recommended)).
-- **Chat and emotes.** Quick-chat phrases, free text, and floating emoji reactions. Bots react too 😎.
+- **Online rooms.** Create a room and invite friends with one tap: **Copy link** or **WhatsApp** sends a link that drops whoever opens it straight into the room (the 5-letter code works too). Add bots to empty seats, ready up, play. Turn timers keep things moving, and a rematch only includes people who are actually there. See [Leaving and coming back](#leaving-and-coming-back).
+- **Voice chat.** WebRTC peer-to-peer audio with mute, speaker mute, and a "speaking" ring on avatars. Links that drop, never come up or go silent are redialled by themselves, the microphone is picked up again after a phone call, voice comes back after a refresh, and a TURN relay covers strict networks (see [Voice relay](#voice-relay-turn-needed-for-mobile-data)).
+- **Chat, stickers and emotes.** Messages in each player's colour, stickers of your own pal pulling a face, an emoji picker, one-tap phrases, and floating emoji reactions. During a game, what someone says pops up as a speech bubble next to their name. Bots react too 😎.
 - **Six Pals.** Cherry, Mossy, Sunny, Splash, Boo and Blaze. Each has a bio and catchphrase, and their faces change mood when they roll a six, get bonked, or win.
 - **Juice.** 3D dice, hop-by-hop token movement, BONK bursts and screen shake, home-run sparkles, confetti, haptics on Android, synthesized SFX and a music loop.
 - **Progress.** Coins, wins, win rate, captures and a trophy shelf. Every game pays coins; hosting an online match costs 100. See [Coins](#coins).
 
 Rules: roll a 6 to leave the yard (Quick mode: 1 or 6). Rolling a 6, capturing, or reaching home gives a bonus roll. Three 6s in a row burns the turn. Start squares and ★ squares are safe. You need the exact roll to finish. Quick mode uses 2 tokens per player.
+
+## Dice
+
+Three kinds, chosen when setting up a game or by the host in the lobby:
+
+| Dice                 | How it rolls                                                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Action** (default) | Every face is weighted by what it would do on the board right now (`shared/dice.ts`).                                                   |
+| **Fair**             | Each player rolls from their own shuffled bag: every number exactly once in every six rolls.                                            |
+| **Lucky**            | Six equal faces, every roll independent. Long waits for a six do happen: 40 rolls in a row without one shows up in a few hundred games. |
+
+What Action dice do:
+
+- **Nobody sits stuck.** With nothing to move, the faces that would move something get likelier with every dead roll, and the fifth roll in a row always moves. A whole yard waiting for a six gets one after about two rolls, and nobody goes more than nine rolls without a usable six.
+- **More bonks.** A face that lands on an opponent is likelier, more so on a quiet board, when it is payback (you get a **REVENGE!** banner), and when the roller is behind.
+- **No pile-ons.** A player who was just sent home is hard to hit again for a couple of rounds.
+- **Comebacks.** The boosts grow for whoever trails and shrink for a runaway leader.
+- **The race keeps moving.** Big numbers and the exact roll that brings a token home come up a bit more; a third six in a row (which burns the turn) is rare.
+
+Everyone gets the same treatment (bots and humans, host and guests), and skill still decides: in the simulation a Savage bot beats three Chill bots about three games in four. Compared with Lucky dice over a few hundred simulated 4-player games, Action dice give the same game length, about 50% more bonks, 40% more sixes, a first token out after 2 rolls instead of 6, and 3% dead rolls instead of 14%. `npm run sim` prints these numbers; the knobs are the `TUNE` object in `shared/dice.ts`.
 
 ## Coins
 
@@ -81,9 +101,9 @@ npm run dev
 
 For preview deployments, generate a **Preview** deploy key in Convex and add it as `CONVEX_DEPLOY_KEY` scoped to **Preview**; each branch then gets its own isolated backend.
 
-### Voice relay (TURN), recommended
+### Voice relay (TURN), needed for mobile data
 
-Voice is peer-to-peer: every pair of players connects directly. Many networks, especially mobile data and some offices, don't allow that, so without a relay a group of four can end up with only some pairs hearing each other. A TURN relay carries the audio for those pairs (the others stay direct).
+Voice is peer-to-peer: every pair of players connects directly. Many networks, especially mobile data and some offices, don't allow that, so **without a relay a group of four can end up split in two pairs that only hear each other** (players on the same Wi-Fi or carrier connect, the rest don't). No amount of retrying fixes that: those pairs need a TURN relay to carry their audio (the others stay direct). Until one is set up, the host sees a note in the lobby's voice card, and players get a message naming who they can't reach.
 
 The easy option is Cloudflare's TURN service. The first 1,000 GB a month are free, and a relayed pair of players uses roughly 40 MB an hour.
 
@@ -95,6 +115,10 @@ That's all; no redeploy is needed. Players in a room get short-lived relay crede
 Using another TURN provider instead? Set `TURN_URLS` (comma-separated), `TURN_USERNAME` and `TURN_CREDENTIAL` in the Convex environment variables. (`VITE_TURN_URL`, `VITE_TURN_USER` and `VITE_TURN_PASS` in Vercel still work too, but they put the credentials in the public app bundle.)
 
 Each player's mic icon shows whether your audio link to them is working: it pulses while connecting and turns red if it can't connect, and the app keeps retrying in the background.
+
+If a player's microphone goes quiet because another app has it (a phone call, a WhatsApp call) or the device muted it, that player gets a message, a warning stays on their mic button, and the others see them as muted until it comes back; coming back to the tab picks the microphone up again. That is a different problem from the split above: with a blocked mic nobody hears that one player, while they still hear everyone.
+
+To look into a call that misbehaves, run `__voice()` in the browser console of a player who is in voice: it lists every link's state, whether it runs through the relay, the audio packets received, and the state of the microphone.
 
 ### Capacity and cost
 
@@ -109,14 +133,14 @@ Vercel's Hobby plan serves the static app for free. Convex's free plan includes 
 
 ## Scripts
 
-| Command              | What it does                                                                        |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `npm run dev`        | Vite + Convex dev backend with hot reload                                           |
-| `npm run build`      | Type-check and build the app into `dist/`                                           |
-| `npm run typecheck`  | TypeScript check (app, shared engine and Convex functions)                          |
-| `npm run sim -- 200` | Plays 200 headless bot games: rule invariants, fair-dice balance, same-seed replays |
-| `npm run format`     | Prettier                                                                            |
-| `npm run gen:topo`   | Regenerates the topographic background pattern                                      |
+| Command              | What it does                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`        | Vite + Convex dev backend with hot reload                                                                                  |
+| `npm run build`      | Type-check and build the app into `dist/`                                                                                  |
+| `npm run typecheck`  | TypeScript check (app, shared engine and Convex functions)                                                                 |
+| `npm run sim -- 200` | Plays hundreds of headless bot games: rule invariants, dice guarantees, same-seed replays, and how each kind of dice plays |
+| `npm run format`     | Prettier                                                                                                                   |
+| `npm run gen:topo`   | Regenerates the topographic background pattern                                                                             |
 
 ## Project layout
 
@@ -125,14 +149,15 @@ shared/        Game logic shared by the browser and Convex
   board.ts       Radial board geometry (4-arm cross and 6-arm hex)
   engine.ts      Move rules, captures, threat detection
   bot.ts         Bot move scoring (easy / normal / hard)
+  dice.ts        Action dice: faces weighted by what they would do on the board
   random.ts      Seeded PRNG and fair-dice bags
   rules.ts       Turn state machine (pure: bonuses, timers, auto-play) with scheduled "pending" transitions
   match.ts       Runs rules.ts in the browser for local games (setTimeout + pause)
 convex/        Online backend: schema, rooms & lobby, game actions + scheduler, chat/emotes, voice signaling
 src/
-  components/    Mascot (SVG characters), Board, Dice, chat, UI kit
+  components/    Mascot (SVG characters), Board, Dice, chat (panel, stickers, emoji), UI kit
   game/          Animation + event-feed hooks, confetti
-  net/           Convex-backed online store and WebRTC voice mesh
+  net/           Convex-backed online store, WebRTC voice mesh, invite links
   audio/         Web Audio synthesizer (all SFX and music, no audio files)
   screens/       Splash, Hub, Setup, Online, Lobby, Game, Results
 ```

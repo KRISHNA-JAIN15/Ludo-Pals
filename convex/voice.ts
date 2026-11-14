@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import { action, internalQuery, mutation, query, type QueryCtx } from './_generated/server';
-import { deleteSignalsTo, memberBySecret, requireMember, roomByCode } from './lib';
+import { action, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { deleteSignalsTo, memberBySecret, membersOf, requireMember, roomByCode } from './lib';
 
 /**
  * Voice chat is peer-to-peer WebRTC; Convex only relays the signaling (offers, answers, ICE)
@@ -50,14 +50,62 @@ export const mute = mutation({
   },
 });
 
+/**
+ * Queue signaling messages for another player in the caller's room. Membership is checked against
+ * the `members` table rather than the room document: that one is rewritten whenever anyone mutes
+ * or readies up, and a burst of signals must not be retried (or lost) over that.
+ */
+async function relay(ctx: MutationCtx, secret: string, to: string, batch: unknown[]) {
+  const member = await memberBySecret(ctx, secret);
+  if (!member || to === member.playerId || batch.length > MAX_SIGNAL_BATCH) return;
+  if (!(await membersOf(ctx, member.roomCode)).some((m) => m.playerId === to)) return;
+  // A player's unread pile is capped, so nobody can bury someone who isn't picking signals up
+  // (the room's cleanup reads that pile in one go).
+  const waiting = await ctx.db
+    .query('signals')
+    .withIndex('by_to', (q) => q.eq('to', to))
+    .take(MAX_PENDING_SIGNALS + 1);
+  let room = MAX_PENDING_SIGNALS - waiting.length;
+  for (const data of batch) {
+    if (room <= 0) break;
+    if (!validSignal(data)) continue;
+    await ctx.db.insert('signals', { roomCode: member.roomCode, to, from: member.playerId, data });
+    room--;
+  }
+}
+
+const MAX_SIGNAL_BATCH = 40;
+/** Unread signals one player can have waiting: a live call needs a few dozen at the very most. */
+const MAX_PENDING_SIGNALS = 80;
+
+/** Only well-formed signaling messages of a sane size are passed on (see VoiceSignal in shared/protocol.ts). */
+function validSignal(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  const size = JSON.stringify(d).length;
+  const cidOk = d.cid === undefined || (typeof d.cid === 'string' && d.cid.length <= 32);
+  switch (d.kind) {
+    case 'hello':
+      return size <= 100;
+    case 'offer':
+    case 'answer':
+      return typeof d.sdp === 'string' && cidOk && size <= 12_000; // audio-only descriptions are a few KB
+    case 'ice':
+      return !!d.candidate && typeof d.candidate === 'object' && cidOk && size <= 2_000;
+    default:
+      return false;
+  }
+}
+
 export const signal = mutation({
   args: { secret: v.string(), to: v.string(), data: v.any() },
-  handler: async (ctx, { secret, to, data }) => {
-    const { member, room } = await requireMember(ctx, secret);
-    if (!room.seats.some((s) => s.id === to && s.kind === 'human')) return;
-    if (JSON.stringify(data ?? null).length > 20_000) return; // offers/answers are a few KB
-    await ctx.db.insert('signals', { roomCode: room.code, to, from: member.playerId, data });
-  },
+  handler: (ctx, { secret, to, data }) => relay(ctx, secret, to, [data]),
+});
+
+/** Several signals for one player at once (an offer or answer together with its ICE candidates), kept in order. */
+export const signals = mutation({
+  args: { secret: v.string(), to: v.string(), batch: v.array(v.any()) },
+  handler: (ctx, { secret, to, batch }) => relay(ctx, secret, to, batch),
 });
 
 /** Signals waiting for the caller, oldest first. */

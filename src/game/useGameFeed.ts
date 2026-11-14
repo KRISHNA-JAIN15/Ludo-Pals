@@ -141,7 +141,9 @@ export function useGameFeed(state: GameState | null, { isMine, passAndPlay, onOv
               mood(e.player, 'smug', 2400);
               e.captures.forEach((c) => mood(c.player, 'sad', 2600));
               const victims = [...new Set(e.captures.map((c) => name(c.player)))].join(' & ');
-              show({ title: 'BONK!', sub: `${name(e.player)} sent ${victims} home`, tone: 'bonk', character: char(e.player) }, 1700);
+              const title = e.revenge ? 'REVENGE!' : e.captures.length > 1 ? 'DOUBLE BONK!' : 'BONK!';
+              const sub = e.revenge ? `${name(e.player)} got even with ${victims}` : `${name(e.player)} sent ${victims} home`;
+              show({ title, sub, tone: 'bonk', character: char(e.player) }, e.revenge ? 1900 : 1700);
             }, hopTime);
           } else if (e.home) {
             after(() => {

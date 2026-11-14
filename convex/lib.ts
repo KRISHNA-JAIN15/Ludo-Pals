@@ -1,5 +1,5 @@
 import { ConvexError } from 'convex/values';
-import { CHARACTERS, CHARACTER_ORDER, pickBotName } from '../shared/characters';
+import { CHARACTERS, CHARACTER_ORDER, DEFAULT_DICE, isDiceMode, pickBotName } from '../shared/characters';
 import { MAX_PLAYERS, MIN_PLAYERS, type RoomSeat, type RoomState } from '../shared/protocol';
 import { botReactions } from '../shared/reactions';
 import { hashSeed } from '../shared/random';
@@ -46,7 +46,10 @@ export function seedOf(game: Doc<'games'>): number {
   return hashSeed(h);
 }
 
-export const isDice = (d: unknown): d is DiceMode => d === 'fair' || d === 'classic';
+export const isDice = isDiceMode;
+/** A room's dice (rooms from before dice were stored used fair dice). */
+export const diceOf = (room: Doc<'rooms'>): DiceMode => (isDice(room.dice) ? room.dice : 'fair');
+export { DEFAULT_DICE };
 
 export function newId(len = 12): string {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -61,7 +64,7 @@ export const cleanName = (n: unknown) =>
     .trim()
     .slice(0, 16) || 'Player';
 
-export const isCharacter = (c: unknown): c is CharacterId => typeof c === 'string' && c in CHARACTERS;
+export const isCharacter = (c: unknown): c is CharacterId => typeof c === 'string' && Object.hasOwn(CHARACTERS, c);
 export const isMode = (m: unknown): m is ModeId => m === 'classic' || m === 'quick';
 export const isLevel = (l: unknown): l is BotLevel => l === 'easy' || l === 'normal' || l === 'hard';
 export const clampPlayers = (n: unknown) => Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, Math.round(Number(n) || 4)));
@@ -74,7 +77,7 @@ export function toRoomState(room: Doc<'rooms'>): RoomState {
     mode: room.mode as ModeId,
     turnSeconds: room.turnSeconds,
     botLevel: room.botLevel as BotLevel,
-    dice: isDice(room.dice) ? room.dice : 'fair',
+    dice: diceOf(room),
     status: room.status,
     seats: room.seats as RoomSeat[],
   };
@@ -213,7 +216,6 @@ async function setPlayerLeft(ctx: MutationCtx, room: Doc<'rooms'>, playerId: str
 
 // ---------------------------------------------------------------- leaving & cleanup
 
-/** Remove a member from their room (leave, kick or timeout). Closes the room when no humans remain. */
 /**
  * Remove a member from their room: leave button, kick, closed tab or long silence.
  * In a running game the seat stays (marked `left`, a bot plays it); anywhere else it is removed.

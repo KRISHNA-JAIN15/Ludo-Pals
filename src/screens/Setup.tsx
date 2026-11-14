@@ -1,6 +1,6 @@
 import { ArrowLeft, Bot, Dices, RefreshCw, User } from 'lucide-react';
 import { useMemo, useState, type CSSProperties } from 'react';
-import { BOT_NAMES, CHARACTERS, CHARACTER_ORDER, DICE_MODES, MODES } from '../../shared/characters';
+import { BOT_NAMES, CHARACTERS, CHARACTER_ORDER, DEFAULT_DICE, DICE_MODES, DICE_ORDER, MODES } from '../../shared/characters';
 import type { BotLevel, CharacterId, DiceMode, MatchConfig, ModeId, SeatKind } from '../../shared/types';
 import { sound } from '../audio/sound';
 import { Mascot } from '../components/Mascot';
@@ -73,7 +73,7 @@ export function Setup() {
   const [bots, setBots] = useState(3);
   const [level, setLevel] = useState<BotLevel>('normal');
   const [timer, setTimer] = useState(0);
-  const [dice, setDice] = useState<DiceMode>('fair');
+  const [dice, setDice] = useState<DiceMode>(DEFAULT_DICE);
   const [seats, setSeats] = useState<SeatDraft[]>(() => buildSeats([], 1, 3, profile));
 
   const total = humans + bots;
@@ -225,11 +225,7 @@ export function Setup() {
         )}
         <div className="field">
           <span className="field-label">Dice</span>
-          <Segmented
-            value={dice}
-            onChange={setDice}
-            options={(['fair', 'classic'] as const).map((d) => ({ value: d, label: DICE_MODES[d].label }))}
-          />
+          <Segmented value={dice} onChange={setDice} options={DICE_ORDER.map((d) => ({ value: d, label: DICE_MODES[d].label }))} />
           <span className="hint">{DICE_MODES[dice].blurb}</span>
         </div>
         <div className="field">

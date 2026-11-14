@@ -1,11 +1,31 @@
-import { Bot, Check, Copy, Crown, Headphones, HeadphoneOff, Mic, MicOff, Phone, PhoneOff, Plus, Share2, UserX, WifiOff, X } from 'lucide-react';
+import {
+  Bot,
+  Check,
+  Copy,
+  Crown,
+  Headphones,
+  HeadphoneOff,
+  Link2,
+  MessageCircle,
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  Plus,
+  Share2,
+  UserPlus,
+  UserX,
+  WifiOff,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { CHARACTERS, CHARACTER_ORDER, DICE_MODES, MODES } from '../../shared/characters';
+import { CHARACTERS, CHARACTER_ORDER, DICE_MODES, DICE_ORDER, MODES, diceInfo } from '../../shared/characters';
 import type { RoomSeat } from '../../shared/protocol';
 import { sound } from '../audio/sound';
 import { ChatPanel } from '../components/ChatPanel';
 import { Mascot } from '../components/Mascot';
 import { Avatar, Btn, Coin, IconBtn, Segmented, VoiceMic } from '../components/ui';
+import { copyText, inviteLink, inviteMessage, whatsAppLink } from '../net/invite';
 import type { LinkState } from '../net/voice';
 import { useOnline } from '../net/online';
 import { HOST_FEE, useApp } from '../store/app';
@@ -19,16 +39,35 @@ export function Lobby() {
   const deafened = useOnline((s) => s.deafened);
   const speaking = useOnline((s) => s.speaking);
   const voiceLinks = useOnline((s) => s.voiceLinks);
+  const voiceRelay = useOnline((s) => s.voiceRelay);
+  const micBlocked = useOnline((s) => s.micBlocked);
   const status = useOnline((s) => s.status);
   const o = useOnline.getState();
   const go = useApp((s) => s.go);
   const toast = useApp((s) => s.toast);
   const updateProfile = useApp((s) => s.updateProfile);
+  const profileName = useApp((s) => s.profile.name);
   const coins = useApp((s) => s.profile.coins);
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false); // synchronous guard: two taps can land before a re-render
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const me = room?.seats.find((s) => s.id === myId);
+  const [name, setName] = useState(me?.name ?? profileName);
+  const typing = useRef(false);
 
   useEffect(() => sound.wantMusic(true), []);
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  // Show the name the room has for us, unless we are in the middle of typing a new one.
+  useEffect(() => {
+    if (!typing.current && me?.name) setName(me.name);
+  }, [me?.name]);
 
   if (!room) {
     return (
@@ -43,42 +82,61 @@ export function Lobby() {
     );
   }
 
-  const me = room.seats.find((s) => s.id === myId);
   const isHost = room.hostId === myId;
   const slots: (RoomSeat | null)[] = Array.from({ length: room.maxPlayers }, (_, i) => room.seats[i] ?? null);
   const taken = new Map(room.seats.map((s) => [s.character, s]));
-  const link = `${location.origin}${location.pathname}?room=${room.code}`;
+  const link = inviteLink(room.code);
   const notReady = room.seats.filter((s) => s.kind === 'human' && s.connected && !s.ready);
   const unreachable = voiceOn ? room.seats.filter((s) => voiceLinks[s.id] === 'failed').map((s) => s.name) : [];
   const canStart = room.seats.length >= 2 && notReady.length === 0;
   const canPay = coins >= HOST_FEE; // the host pays for each match
 
-  const share = async () => {
+  const flash = (what: 'code' | 'link') => {
+    setCopied(what);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(null), 1800);
+  };
+
+  const copyLink = async () => {
     sound.play('click');
-    const text = `Join my Ludo Pals room! Code: ${room.code}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Ludo Pals', text, url: link });
-        return;
-      }
-    } catch {
-      /* cancelled */
-    }
-    try {
-      await navigator.clipboard.writeText(link);
-      toast('Invite link copied!', 'success');
-    } catch {
-      toast(`Room code: ${room.code}`);
-    }
+    if (await copyText(link)) {
+      flash('link');
+      toast('Invite link copied! Anyone who opens it joins this room.', 'success');
+    } else toast(`Share this link: ${link}`);
   };
 
   const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(room.code);
+    sound.play('click');
+    if (await copyText(room.code)) {
+      flash('code');
       toast('Room code copied', 'success');
-    } catch {
-      toast(`Room code: ${room.code}`);
+    } else toast(`Room code: ${room.code}`);
+  };
+
+  const share = async () => {
+    sound.play('click');
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Ludo Pals', text: `Join my Ludo Pals game! 🎲 Room code ${room.code}`, url: link });
+      } catch {
+        /* cancelled */
+      }
+      return;
     }
+    if (await copyText(inviteMessage(room.code))) toast('Invite copied! Paste it to your friends.', 'success');
+    else toast(`Share this link: ${link}`);
+  };
+
+  const saveName = () => {
+    typing.current = false;
+    const n = name.trim().slice(0, 16);
+    if (!n) {
+      setName(me?.name ?? profileName);
+      return;
+    }
+    setName(n);
+    if (n !== me?.name) o.update({ name: n });
+    if (n !== profileName) updateProfile({ name: n });
   };
 
   const leave = () => {
@@ -108,14 +166,39 @@ export function Lobby() {
               {ch}
             </span>
           ))}
-          <span className="code-copy">
-            <Copy size={16} />
+          <span className={copied === 'code' ? 'code-copy is-done' : 'code-copy'}>
+            {copied === 'code' ? <Check size={16} /> : <Copy size={16} />}
           </span>
         </button>
         <span className="room-meta">
-          {MODES[room.mode].label} · {DICE_MODES[room.dice ?? 'fair'].label} dice · {room.turnSeconds ? `${room.turnSeconds}s turns` : 'no timer'} ·{' '}
+          {MODES[room.mode].label} · {diceInfo(room.dice).label} dice · {room.turnSeconds ? `${room.turnSeconds}s turns` : 'no timer'} ·{' '}
           {room.seats.length}/{room.maxPlayers} players
         </span>
+        <div className="invite-row">
+          <button
+            type="button"
+            className={copied === 'link' ? 'invite-btn invite-btn--link is-done' : 'invite-btn invite-btn--link'}
+            onClick={copyLink}
+          >
+            {copied === 'link' ? <Check size={17} /> : <Link2 size={17} />}
+            <span>{copied === 'link' ? 'Copied!' : 'Copy link'}</span>
+          </button>
+          <a
+            className="invite-btn invite-btn--wa"
+            href={whatsAppLink(room.code)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => sound.play('click')}
+            aria-label="Invite on WhatsApp"
+          >
+            <span className="wa-icon" aria-hidden>
+              <MessageCircle size={19} />
+              <Phone size={8} strokeWidth={3.2} />
+            </span>
+            <span>WhatsApp</span>
+          </a>
+        </div>
+        <span className="invite-hint">Friends who open the link land right in this room.</span>
       </section>
 
       <section className="lobby-seats" style={{ '--n': room.maxPlayers } as CSSProperties}>
@@ -134,41 +217,74 @@ export function Lobby() {
           ) : (
             <div key={`empty-${i}`} className="seat-tile seat-tile--empty">
               <span className="seat-empty-ring" />
-              <span className="seat-empty-text">Waiting…</span>
-              {isHost && (
-                <Btn size="sm" variant="white" icon={<Bot size={14} />} onClick={() => o.addBot()}>
-                  Add bot
+              <span className="seat-empty-text">
+                Waiting
+                <i className="dots3" aria-hidden>
+                  <b />
+                  <b />
+                  <b />
+                </i>
+              </span>
+              <div className="seat-empty-actions">
+                <Btn size="sm" variant="white" icon={<UserPlus size={14} />} onClick={() => void copyLink()} silent>
+                  Invite
                 </Btn>
-              )}
+                {isHost && (
+                  <Btn size="sm" variant="white" icon={<Bot size={14} />} onClick={() => o.addBot()}>
+                    Bot
+                  </Btn>
+                )}
+              </div>
             </div>
           ),
         )}
       </section>
 
       <section className="card">
-        <h2 className="card-title">Your pal</h2>
-        <div className="pal-picker">
-          {CHARACTER_ORDER.map((id) => {
-            const owner = taken.get(id);
-            const mine = me?.character === id;
-            const blocked = !!owner && !mine;
-            return (
-              <button
-                key={id}
-                type="button"
-                className={['pal-pick', mine ? 'is-on' : '', blocked ? 'is-taken' : ''].join(' ')}
-                disabled={blocked}
-                onClick={() => {
-                  sound.play('pop');
-                  o.update({ character: id });
-                  updateProfile({ character: id });
-                }}
-                title={blocked ? `${owner!.name} has ${CHARACTERS[id].name}` : CHARACTERS[id].name}
-              >
-                <Avatar id={id} size={46} />
-              </button>
-            );
-          })}
+        <h2 className="card-title">You</h2>
+        <label className="field">
+          <span className="field-label">Name</span>
+          <input
+            className="input"
+            value={name}
+            maxLength={16}
+            onChange={(e) => {
+              typing.current = true;
+              setName(e.target.value);
+            }}
+            onBlur={saveName}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            enterKeyHint="done"
+            autoComplete="off"
+            aria-label="Your name"
+          />
+        </label>
+        <div className="field">
+          <span className="field-label">Pal</span>
+          <div className="pal-picker">
+            {CHARACTER_ORDER.map((id) => {
+              const owner = taken.get(id);
+              const mine = me?.character === id;
+              const blocked = !!owner && !mine;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className={['pal-pick', mine ? 'is-on' : '', blocked ? 'is-taken' : ''].join(' ')}
+                  disabled={blocked}
+                  onClick={() => {
+                    sound.play('pop');
+                    o.update({ character: id });
+                    updateProfile({ character: id });
+                  }}
+                  title={blocked ? `${owner!.name} has ${CHARACTERS[id].name}` : CHARACTERS[id].name}
+                  aria-label={blocked ? `${CHARACTERS[id].name} (taken by ${owner!.name})` : CHARACTERS[id].name}
+                >
+                  <Avatar id={id} size={46} />
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 
@@ -200,9 +316,24 @@ export function Lobby() {
             </Btn>
           )}
         </div>
-        {unreachable.length > 0 && (
+        {voiceOn && micBlocked && (
+          <p className="voice-warn">
+            Your mic isn&apos;t picking anything up, so nobody can hear you. Another app (a phone or WhatsApp call) may be using it, or it is muted on
+            your device.
+          </p>
+        )}
+        {voiceOn && voiceRelay === false && isHost && unreachable.length === 0 && (
           <p className="hint">
-            Can&apos;t connect audio with {unreachable.join(', ')} yet. A strict network (often mobile data) may be blocking it; still retrying.
+            No voice relay is set up for this game, so players on strict networks (often mobile data) may not hear everyone. The README&apos;s
+            &ldquo;Voice relay&rdquo; section fixes that in two minutes.
+          </p>
+        )}
+        {unreachable.length > 0 && (
+          <p className="voice-warn">
+            Can&apos;t connect audio with {unreachable.join(', ')} yet.{' '}
+            {voiceRelay === false
+              ? 'One of your networks blocks direct calls and this game has no voice relay set up, so this pair may not connect.'
+              : 'Still retrying.'}
           </p>
         )}
       </section>
@@ -240,11 +371,11 @@ export function Lobby() {
           <div className="field">
             <span className="field-label">Dice</span>
             <Segmented
-              value={room.dice ?? 'fair'}
+              value={room.dice}
               onChange={(v) => o.settings({ dice: v })}
-              options={(['fair', 'classic'] as const).map((d) => ({ value: d, label: DICE_MODES[d].label }))}
+              options={DICE_ORDER.map((d) => ({ value: d, label: DICE_MODES[d].label }))}
             />
-            <span className="hint">{DICE_MODES[room.dice ?? 'fair'].blurb}</span>
+            <span className="hint">{diceInfo(room.dice).blurb}</span>
           </div>
           <div className="field">
             <span className="field-label">Bot skill</span>
@@ -285,6 +416,7 @@ export function Lobby() {
               variant="black"
               size="lg"
               full
+              className={canStart && canPay && !starting ? 'btn--pulse' : ''}
               onClick={() => {
                 if (startingRef.current) return;
                 startingRef.current = true;
@@ -298,19 +430,22 @@ export function Lobby() {
             >
               {!canPay
                 ? `Need ${HOST_FEE} coins to start`
-                : canStart
-                  ? `Start game (${room.seats.length} players)`
-                  : room.seats.length < 2
-                    ? 'Need 2+ players'
-                    : `Waiting for ${notReady.length} to get ready`}
+                : starting
+                  ? 'Starting…'
+                  : canStart
+                    ? `Start game (${room.seats.length} players)`
+                    : room.seats.length < 2
+                      ? 'Need 2+ players'
+                      : `Waiting for ${notReady.length} to get ready`}
             </Btn>
-            {room.seats.length < 2 && <p className="hint center">Share the code or add a bot to start.</p>}
+            {room.seats.length < 2 && <p className="hint center">Invite a friend or add a bot to start.</p>}
           </>
         ) : (
           <Btn
             variant={me?.ready ? 'teal' : 'black'}
             size="lg"
             full
+            className={me?.ready ? '' : 'btn--pulse'}
             icon={me?.ready ? <Check size={20} /> : undefined}
             onClick={() => o.update({ ready: !me?.ready })}
           >
@@ -368,7 +503,7 @@ function SeatTile({
       </div>
       <span className="seat-tile-name">
         {isHost && <Crown size={13} className="crown" />}
-        {seat.name}
+        <span className="seat-tile-name-text">{seat.name}</span>
       </span>
       <span className="seat-tile-tags">
         {isMe && <span className="tag">YOU</span>}
